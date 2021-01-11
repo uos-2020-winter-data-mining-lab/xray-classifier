@@ -2,16 +2,39 @@ import os
 import shutil
 
 
-DATA_DIR = '../../data'
+DATA_DIR = 'data/'
 
 
-def make_path(basepath, dirname):
-    dirpath = os.path.join(basepath, dirname)
-    try:
-        os.mkdir(dirpath)
-    except FileExistsError:
-        pass
-    return dirpath
+def copy_data(source_dir):
+    for category in os.listdir(source_dir):
+        split_valid(source_dir, category)
+
+
+def split_valid(base_path, category, split_rate=0.80):
+    source_path = os.path.join(base_path, category)
+
+    for data_dir in os.listdir(source_path):
+        data_path = os.path.join(source_path, data_dir)
+        data_list = os.listdir(data_path)
+        data_size = len(data_list)
+        print(f"{category}, size : {data_size}")
+
+        scope = {
+            'train': (0, int(data_size * split_rate)),
+            'valid': (int(data_size * split_rate), data_size)
+        }
+
+        for dir_type in ['train', 'valid']:
+            copy_dir = make_path(DATA_DIR, dir_type)
+            copy_category_dir = make_path(copy_dir, category)
+            copy_data_dir = make_path(copy_category_dir, data_dir)
+            copy_files(
+                data_path,
+                copy_data_dir,
+                scope[dir_type][0],
+                scope[dir_type][1]
+            )
+            print(f"{dir_type} : {scope[dir_type][0]} - {scope[dir_type][1]}")
 
 
 def copy_files(origin_dir, target_dir, scope_from, scope_to):
@@ -25,34 +48,10 @@ def copy_files(origin_dir, target_dir, scope_from, scope_to):
             pass
 
 
-def load_data(source_dir, category):
-    base_path = make_path(source_dir, category)
-    origin_single_default_dir = make_path(base_path, 'Single_Default')
-
-    data_list = os.listdir(origin_single_default_dir)
-    data_size = len(data_list)
-
-    scope = {
-        'train': (0, int(data_size/100)*16),
-        'valid': (int(data_size/100)*16, int(data_size/100)*20),
-    }
-
-    train_dir = make_path(DATA_DIR, 'train')
-    train_target_dir = make_path(train_dir, category)
-    train_single_default_dir = make_path(train_target_dir, 'Single_Default')
-    copy_files(
-        origin_single_default_dir,
-        train_single_default_dir,
-        scope['train'][0],
-        scope['train'][1]
-    )
-
-    valid_dir = make_path(DATA_DIR, 'valid')
-    valid_target_dir = make_path(valid_dir, category)
-    valid_single_default_dir = make_path(valid_target_dir, 'Single_Default')
-    copy_files(
-        origin_single_default_dir,
-        valid_single_default_dir,
-        scope['valid'][0],
-        scope['valid'][1]
-    )
+def make_path(basepath, dirname):
+    dirpath = os.path.join(basepath, dirname)
+    try:
+        os.mkdir(dirpath)
+    except FileExistsError:
+        pass
+    return dirpath

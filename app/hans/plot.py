@@ -2,9 +2,9 @@
 import matplotlib.pyplot as plt
 
 
-def plotting(history, EPOCHS):
+def plotting(history):
     history_dict = history.history
-    epochs = range(1, EPOCHS + 1)
+    epochs = range(1, len(history_dict['acc']) + 1)
     plotting_figure(history_dict, 'loss', epochs)
     plotting_figure(history_dict, 'acc', epochs)
 

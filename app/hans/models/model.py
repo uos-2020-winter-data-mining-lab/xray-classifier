@@ -120,9 +120,9 @@ def yolo_head(feats, anchors, num_classes, input_shape, calc_loss=False):
 
     # Adjust preditions to each spatial grid point and anchor size.
     box_xy = (K.sigmoid(feats[..., :2]) + grid) / \
-        K.cast(grid_shape[::-1], K.dtype(feats))
+        K.cast(grid_shape[..., ::-1], K.dtype(feats))
     box_wh = K.exp(feats[..., 2:4]) * anchors_tensor / \
-        K.cast(input_shape[::-1], K.dtype(feats))
+        K.cast(input_shape[..., ::-1], K.dtype(feats))
     box_confidence = K.sigmoid(feats[..., 4:5])
     box_class_probs = K.sigmoid(feats[..., 5:])
 
@@ -241,8 +241,8 @@ def preprocess_true_boxes(true_boxes, input_shape, anchors, num_classes):
     y_true: list of array, shape like yolo_outputs, xywh are reletive value
 
     '''
-    assert (true_boxes[..., 4] < num_classes).all(
-    ), 'class id must be less than num_classes'
+    assert (true_boxes[..., 4] < num_classes).all(), \
+        'class id must be less than num_classes'
     num_layers = len(anchors)//3  # default setting
     anchor_mask = [[6, 7, 8], [3, 4, 5], [0, 1, 2]
                    ] if num_layers == 3 else [[3, 4, 5], [1, 2, 3]]
@@ -326,9 +326,6 @@ def box_iou(b1, b2):
     iou: tensor, shape=(i1,...,iN, j)
 
     '''
-    print(b1)
-    print(b2)
-
     # Expand dim to apply broadcasting.
     b1 = K.expand_dims(b1, -2)
     b1_xy = b1[..., :2]

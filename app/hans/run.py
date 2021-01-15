@@ -1,15 +1,13 @@
-import os
-import numpy as np
 import tensorflow as tf
 from keras.optimizers import Adam
 from keras.callbacks import ReduceLROnPlateau, EarlyStopping
 
 from app.hans.config import INPUT_SHAPE, BATCH_SIZE
-from app.hans.plot import plotting
-from .models.train import create_model
-
 from app.hans.process.metadata import read_meta_files
 from app.hans.process.process import split, generator
+from app.hans.models.model import create_model
+
+from .plot import plotting
 
 
 config = tf.compat.v1.ConfigProto(

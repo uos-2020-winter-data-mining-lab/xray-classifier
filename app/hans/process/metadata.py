@@ -15,9 +15,10 @@ def read_meta_files(meta_dir):
 
     data = get_data(annotation_path)
     classes = get_classes(categories_path)
+    num_classes = len(classes)
     anchors = get_anchors(anchors_path)
 
-    return data, classes, anchors
+    return data, num_classes, anchors
 
 
 def get_data(data_path):

@@ -5,21 +5,20 @@ from app.hans.models.model import preprocess_true_boxes
 
 
 def data_split(data, split_rate=0.9, shuffle_seed=10101):
+    '''data split to train and valid'''
     np.random.seed(shuffle_seed)
     np.random.shuffle(data)
     np.random.seed(None)
-
     split_index = int(len(data)*split_rate)
+
     train_data = data[:split_index]
-    num_train = len(train_data)
-
     valid_data = data[split_index:]
-    num_valid = len(valid_data)
 
-    print(f'>> Train on {num_train} samples, '
-          f'val on {num_valid} samples ')
+    print(">> "
+          f"Train on {len(train_data)} samples, "
+          f"Valid on {len(valid_data)} samples ")
 
-    return (train_data, valid_data), (num_train, num_valid)
+    return train_data, valid_data
 
 
 def data_generator(data, anchors):
@@ -35,7 +34,7 @@ def data_generator(data, anchors):
         for b in range(BATCH_SIZE):
             if i == 0:
                 np.random.shuffle(data)
-            image, box = get_random_data(data[i],  INPUT_SHAPE, random=True)
+            image, box = get_random_data(data[i], random=True)
             image_data.append(image)
             box_data.append(box)
             i = (i+1) % N

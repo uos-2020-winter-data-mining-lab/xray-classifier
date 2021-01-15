@@ -12,6 +12,7 @@ from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.normalization import BatchNormalization
 from keras.models import Model
 from keras.regularizers import l2
+from app.hans.config import NUM_CLASSES
 
 from .utils import compose
 
@@ -225,7 +226,7 @@ def yolo_eval(yolo_outputs,
     return boxes_, scores_, classes_
 
 
-def preprocess_true_boxes(true_boxes, input_shape, anchors, num_classes):
+def preprocess_true_boxes(true_boxes, input_shape, anchors):
     '''Preprocess true boxes to training input format
 
     Parameters
@@ -241,7 +242,7 @@ def preprocess_true_boxes(true_boxes, input_shape, anchors, num_classes):
     y_true: list of array, shape like yolo_outputs, xywh are reletive value
 
     '''
-    assert (true_boxes[..., 4] < num_classes).all(), \
+    assert (true_boxes[..., 4] < NUM_CLASSES).all(), \
         'class id must be less than num_classes'
     num_layers = len(anchors)//3  # default setting
     anchor_mask = [[6, 7, 8], [3, 4, 5], [0, 1, 2]
@@ -264,7 +265,7 @@ def preprocess_true_boxes(true_boxes, input_shape, anchors, num_classes):
                 grid_shapes[layer][0],
                 grid_shapes[layer][1],
                 len(anchor_mask[layer]),
-                5 + num_classes
+                5 + NUM_CLASSES
             ),
             dtype='float32'
         ) for layer in range(num_layers)
@@ -400,10 +401,8 @@ def yolo_loss(args, anchors, num_classes, ignore_thresh=.5, print_loss=False):
 
         # Darknet raw box to calculate loss.
         raw_true_xy = y_true[layer][..., :2]*grid_shapes[layer][::-1] - grid
-        raw_true_wh = K.log(y_true[layer][..., 2:4] /
-                            anchors[anchor_mask[layer]] * input_shape[::-1])
-        raw_true_wh = K.switch(object_mask, raw_true_wh,
-                               K.zeros_like(raw_true_wh))  # avoid log(0)=-inf
+        raw_true_wh = K.log(y_true[layer][..., 2:4] / anchors[anchor_mask[layer]] * input_shape[::-1] + 1e-10)
+        raw_true_wh = K.switch(object_mask, raw_true_wh, K.zeros_like(raw_true_wh))
         box_loss_scale = 2 - y_true[layer][..., 2:3]*y_true[layer][..., 3:4]
 
         # Find ignore mask, iterate over each of batch.

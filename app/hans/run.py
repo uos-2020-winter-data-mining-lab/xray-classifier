@@ -6,6 +6,7 @@ from app.hans.config import INPUT_SHAPE, BATCH_SIZE
 from app.hans.process.metadata import read_meta_files
 from app.hans.process.process import split, generator, preprocess_data
 from app.hans.models.model import create_model
+from app.hans.plot import display_image
 from .plot import plotting
 
 
@@ -24,7 +25,9 @@ def run():
     input_shape, batch_size = INPUT_SHAPE, BATCH_SIZE
 
     # Step 1 . Load Data
-    data = preprocess_data(data)
+    preprocess = False
+    if preprocess:
+        data = preprocess_data(data)
     train_data, valid_data = split(data)
 
     # Step 2. Data Generating
@@ -52,7 +55,7 @@ def run():
     # Step 5. Model Fitting
     reduce_lr = ReduceLROnPlateau(factor=0.1, patience=3, verbose=1)
     early_stopping = EarlyStopping(min_delta=0, patience=10, verbose=1)
-    checkpoint = ModelCheckpoint(
+    ModelCheckpoint(
         log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
         monitor='val_loss',
         save_weights_only=True,
@@ -65,13 +68,16 @@ def run():
         steps_per_epoch=max(1, len(train_data)//batch_size),
         validation_data=valid_generator,
         validation_steps=max(1, len(valid_data)//batch_size),
-        epochs=2,
-        callbacks=[checkpoint, reduce_lr, early_stopping])
+        epochs=30,
+        callbacks=[reduce_lr, early_stopping])
 
-    model.save_weights(log_dir + 'trained_weights_final.h5')
+    model.save_weights('data/trained_weights_final.h5')
 
     # Step 6. Plotting
-    # plotting(history)
+    plotting(history)
+    display_image(
+        'data//raw//dataset//Astrophysics//Aerosol//Single_Default//'
+        'H_8481.80-1090_01_153.png')
 
     # Step 7. Predict / Evaluate
     # results = model.evaluate(test_data, test_labels)

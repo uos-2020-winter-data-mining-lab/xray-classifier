@@ -4,7 +4,7 @@ from keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCheckpoint
 
 from app.hans.config import INPUT_SHAPE, BATCH_SIZE
 from app.hans.process.metadata import read_meta_files
-from app.hans.process.process import split, generator
+from app.hans.process.process import split, generator, preprocess_data
 from app.hans.models.model import create_model
 from .plot import plotting
 
@@ -24,6 +24,7 @@ def run():
     input_shape, batch_size = INPUT_SHAPE, BATCH_SIZE
 
     # Step 1 . Load Data
+    data = preprocess_data(data)
     train_data, valid_data = split(data)
 
     # Step 2. Data Generating
@@ -56,7 +57,7 @@ def run():
         monitor='val_loss',
         save_weights_only=True,
         save_best_only=True,
-        period=3
+        save_freq=3
     )
 
     history = model.fit(

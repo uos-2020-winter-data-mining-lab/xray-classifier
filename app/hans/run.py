@@ -1,12 +1,11 @@
 import tensorflow as tf
 from keras.optimizers import Adam
-from keras.callbacks import ReduceLROnPlateau, EarlyStopping
+from keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCheckpoint
 
 from app.hans.config import INPUT_SHAPE, BATCH_SIZE
 from app.hans.process.metadata import read_meta_files
 from app.hans.process.process import split, generator
 from app.hans.models.model import create_model
-
 from .plot import plotting
 
 
@@ -20,10 +19,11 @@ tf.compat.v1.keras.backend.set_session(session)
 
 def run():
     # Step 0 . Config
+    log_dir = 'logs/'
     data, num_classes, anchors = read_meta_files(meta_dir='data/metadata')
     input_shape, batch_size = INPUT_SHAPE, BATCH_SIZE
 
-    # Step 1 . Data Preprocessing
+    # Step 1 . Load Data
     train_data, valid_data = split(data)
 
     # Step 2. Data Generating
@@ -51,6 +51,13 @@ def run():
     # Step 5. Model Fitting
     reduce_lr = ReduceLROnPlateau(factor=0.1, patience=3, verbose=1)
     early_stopping = EarlyStopping(min_delta=0, patience=10, verbose=1)
+    checkpoint = ModelCheckpoint(
+        log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
+        monitor='val_loss',
+        save_weights_only=True,
+        save_best_only=True,
+        period=3
+    )
 
     history = model.fit(
         train_generator,
@@ -58,7 +65,9 @@ def run():
         validation_data=valid_generator,
         validation_steps=max(1, len(valid_data)//batch_size),
         epochs=2,
-        callbacks=[reduce_lr, early_stopping])
+        callbacks=[checkpoint, reduce_lr, early_stopping])
+
+    model.save_weights(log_dir + 'trained_weights_final.h5')
 
     # Step 6. Plotting
     # plotting(history)

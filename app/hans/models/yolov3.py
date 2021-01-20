@@ -155,6 +155,7 @@ def yolo_eval(
         boxes_.append(class_boxes)
         scores_.append(class_box_scores)
         classes_.append(classes)
+
     boxes_ = K.concatenate(boxes_, axis=0)
     scores_ = K.concatenate(scores_, axis=0)
     classes_ = K.concatenate(classes_, axis=0)

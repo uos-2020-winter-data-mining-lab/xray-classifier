@@ -2,33 +2,7 @@
 
 import tensorflow as tf
 from keras import backend as K
-from keras.layers import (
-    UpSampling2D, Concatenate
-)
-from keras.models import Model
-from .darknet53 import DarknetConv2D_BN_LRU, darknet_body, make_last_layers
-
-from .utils import compose, box_iou
-
-
-def yolo_body(inputs, num_anchors, num_classes):
-    """Create YOLO_V3 model CNN body in Keras."""
-    darknet = Model(inputs, darknet_body(inputs))
-    x, y1 = make_last_layers(darknet.output, 512, num_anchors*(num_classes+5))
-
-    x = compose(
-        DarknetConv2D_BN_LRU(256, (1, 1)),
-        UpSampling2D(2))(x)
-    x = Concatenate()([x, darknet.layers[152].output])
-    x, y2 = make_last_layers(x, 256, num_anchors*(num_classes+5))
-
-    x = compose(
-        DarknetConv2D_BN_LRU(128, (1, 1)),
-        UpSampling2D(2))(x)
-    x = Concatenate()([x, darknet.layers[92].output])
-    x, y3 = make_last_layers(x, 128, num_anchors*(num_classes+5))
-
-    return Model(inputs, [y1, y2, y3])
+from .utils import box_iou
 
 
 def yolo_head(feats, anchors, num_classes, input_shape, calc_loss=False):
@@ -254,6 +228,9 @@ def yolo_loss(args, anchors, num_classes, ignore_thresh=.5, print_loss=False):
         class_loss = K.sum(class_loss) / mf
         loss += xy_loss + wh_loss + confidence_loss + class_loss
         if print_loss:
-            loss = tf.Print(loss, [loss, xy_loss, wh_loss, confidence_loss, class_loss, K.sum(
-                ignore_mask)], message='loss: ')
+            loss = tf.Print(
+                loss,
+                [
+                    loss, xy_loss, wh_loss, confidence_loss, class_loss, K.sum(ignore_mask)
+                ], message='loss: ')
     return loss

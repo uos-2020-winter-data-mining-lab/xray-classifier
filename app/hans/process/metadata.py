@@ -15,10 +15,9 @@ def read_meta_files(meta_dir):
 
     data = get_data(annotation_path)
     classes = get_classes(categories_path)
-    num_classes = len(classes)
     anchors = get_anchors(anchors_path)
 
-    return data, num_classes, anchors
+    return data, classes, anchors
 
 
 def get_data(data_path):
@@ -50,7 +49,7 @@ def get_anchors(anchors_path):
     with open(anchors_path) as f:
         anchors = f.readline()
     anchors = [float(x) for x in anchors.split(',')]
-    return np.array(anchors).reshape(-1, 2)
+    return np.array(anchors)
 
 
 def annotating(filepath):
@@ -85,7 +84,7 @@ def annotating(filepath):
             continue
         cat_id = CATEGORIES.index(cat_name)
 
-        name_box_id[img_path].append([ant['bbox'], cat_id])
+        name_box_id[img_path].append([ant['bbox'], cat_name])
 
     write_annotation_file(name_box_id, filepath)
 
@@ -101,7 +100,7 @@ def write_annotation_file(name_box_id, filepath):
                 x_max = x_min + int(info[0][2])
                 y_max = y_min + int(info[0][3])
 
-                box_info = f" {x_min},{y_min},{x_max},{y_max},{int(info[1])}"
+                box_info = f" {x_min},{y_min},{x_max},{y_max},{info[1]}"
                 f.write(box_info)
             f.write('\n')
 
@@ -115,7 +114,13 @@ def categorying(filepath):
 def anchoring(filepath):
     with open(filepath, mode='w') as f:
         f.write(
-            "10,13,  16,30,  33,23,  "
-            "30,61,  62,45,  59,119,  "
-            "116,90,  156,198,  373,326"
+            "10,13,"
+            "16,30,"
+            "33,23,"
+            "30,61,"
+            "62,45,"
+            "59,119,"
+            "116,90,"
+            "156,198,"
+            "373,326"
         )

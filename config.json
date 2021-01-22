@@ -1,0 +1,33 @@
+{
+    "model" : {
+        "min_input_size":       352,
+        "max_input_size":       448,
+        "anchors":              [10,13,  16,30,  33,23,  30,61,  62,45,  59,119,  116,90,  156,198,  373,326],
+        "labels":               ["Alcohol", "Axe", "Chisel", "Gun", "Hammer", "HandCuffs", "Knife", "Lighter", "Match", "Plier", "PrtableGas", "Saw", "Scissors", "Screwdriver", "Spanner", "SupplymentaryBattery", "Thinner", "Throwing Knife", "ZippoOil"]
+    },
+
+    "train": {
+        "train_image_folder":   "D:/xray-dataset/dataset/image/Astrophysics/",
+        "train_annot_folder":   "D:/xray-dataset/dataset/annotation/Train/Train/Pascal/Astrophysics/",
+        "cache_name":           "xrayimage.pkl",
+
+        "split_rate":           0.9,
+        "train_times":          8,
+        "batch_size":           16,
+        "learning_rate":        1e-4,
+        "nb_epochs":            100,
+        "warmup_epochs":        3,
+        "ignore_thresh":        0.5,
+        "gpus":                 "1",
+
+        "grid_scales":          [1,1,1],
+        "obj_scale":            5,
+        "noobj_scale":          1,
+        "xywh_scale":           1,
+        "class_scale":          1,
+
+        "tensorboard_dir":      "logs",
+        "saved_weights_name":   "C:/Users/Handal/github/xray-classifier/data/yolov3.h5",
+        "debug":                true
+    }
+}

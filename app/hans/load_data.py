@@ -35,7 +35,11 @@ def load_data(
 
 
 def parse_coco_annotation(coco_dir):
+<<<<<<< HEAD
     if os.path.exists("data/dataset.pkl"):
+=======
+    if os.path.exists("dataset.pkl"):
+>>>>>>> e0f8948af1cc73c0362f2155eee855b89baf8e27
         print("load from .pkl file")    
         with open("dataset.pkl", 'rb') as handle:
             cache = pickle.load(handle)

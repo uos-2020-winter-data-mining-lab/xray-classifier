@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 from keras.utils import Sequence
-from utils.bbox import BoundBox, bbox_iou
+from app.hans.bbox import BoundBox, bbox_iou
 from .utils import get_random_data, preprocess_true_boxes
 import matplotlib.pyplot as plt
 

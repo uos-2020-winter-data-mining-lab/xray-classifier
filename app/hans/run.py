@@ -5,7 +5,7 @@ from app.hans.config import INPUT_SHAPE, BATCH_SIZE
 from app.hans.process.metadata import read_meta_files
 from app.hans.process.process import split, BatchGenerator
 from app.hans.models.yolo import create_model
-from utils.utils import evaluate
+# from utils.utils import evaluate
 from .plot import plotting
 
 
@@ -28,12 +28,12 @@ def run():
     train_generator = BatchGenerator(
         data=train_data,
         anchors=anchors,
-        labels=classes
+        labels=classes,
     )
     valid_generator = BatchGenerator(
         data=valid_data,
         anchors=anchors,
-        labels=classes
+        labels=classes,
     )
 
     # Step 3. Model Setting
@@ -76,19 +76,19 @@ def run():
     # Step 7. Predict / Evaluate
 
     print("Evaluate")
-    average_precisions = evaluate(
-        model=infer_model,
-        data=valid_data,
-        generator=valid_generator,
-        anchors=anchors,
-        num_classes=len(classes)
-    )
+    # average_precisions = evaluate(
+    #     model=infer_model,
+    #     data=valid_data,
+    #     generator=valid_generator,
+    #     anchors=anchors,
+    #     num_classes=len(classes)
+    # )
 
-    for label, average_precision in average_precisions.items():
-        print(f'{classes[label]} : {average_precision:.4f}')
+    # for label, average_precision in average_precisions.items():
+    #     print(f'{classes[label]} : {average_precision:.4f}')
 
-    mAP = sum(average_precisions.values()) / len(average_precisions)
-    print(f'mAP: {mAP:.4f}')
+    # mAP = sum(average_precisions.values()) / len(average_precisions)
+    # print(f'mAP: {mAP:.4f}')
 
     # display_image(
     #     'data//raw//dataset//Astrophysics//Aerosol//Single_Default//'

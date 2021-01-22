@@ -1,6 +1,4 @@
-import cv2
 import matplotlib.pyplot as plt
-from app.hans.process.process import crop_and_resize_images
 
 
 def plotting(history):
@@ -8,12 +6,6 @@ def plotting(history):
     epochs = range(1, len(history_dict['loss']) + 1)
     plotting_figure(history_dict, 'loss', epochs)
 
-    plt.show()
-
-
-def display_image(image_path):
-    image = crop_and_resize_images(image_path)
-    plt.imshow(image)
     plt.show()
 
 

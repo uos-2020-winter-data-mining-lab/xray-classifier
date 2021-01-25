@@ -1,8 +1,6 @@
 import cv2
 import numpy as np
 from keras.utils import Sequence
-
-from matplotlib import pyplot as plt
 from app.hans.bbox import BoundBox, bbox_iou
 from .generator_util import (
     apply_random_scale_and_crop,
@@ -12,11 +10,24 @@ from .generator_util import (
 )
 
 
+def normalize(image):
+    return image/255.
+
+
 class BatchGenerator(Sequence):
     def __init__(
-        self, data, anchors, labels, downsample=32, max_box_per_image=30,
-        batch_size=16, min_net_size=320, max_net_size=608,
-        shuffle=True, jitter=True, norm=None
+        self,
+        data,
+        anchors,
+        labels,
+        downsample=32,
+        max_box_per_image=30,
+        batch_size=16,
+        min_net_size=448,
+        max_net_size=448,
+        shuffle=False,
+        jitter=0.0,
+        norm=normalize
     ):
         self.data = data
         self.batch_size = batch_size
@@ -31,7 +42,7 @@ class BatchGenerator(Sequence):
         self.anchors = [BoundBox(0, 0, anchors[2*i], anchors[2*i+1])
                         for i in range(len(anchors)//2)]
         self.net_h = 416
-        self.net_w = 416
+        self.net_w = 832
         if shuffle:
             np.random.shuffle(self.data)
 
@@ -61,18 +72,18 @@ class BatchGenerator(Sequence):
 
         # initialize the inputs and the outputs
         # desired network output 1
-        yolo_1 = np.zeros((
+        yolo1 = np.zeros((
             batches, 1*base_grid_h,  1*base_grid_w,
             len(self.anchors)//3, 5+len(self.labels)))
         # desired network output 2
-        yolo_2 = np.zeros((
+        yolo2 = np.zeros((
             batches, 2*base_grid_h,  2*base_grid_w,
             len(self.anchors)//3, 5+len(self.labels)))
         # desired network output 3
-        yolo_3 = np.zeros((
+        yolo3 = np.zeros((
             batches, 4*base_grid_h,  4*base_grid_w,
             len(self.anchors)//3, 5+len(self.labels)))
-        yolos = [yolo_3, yolo_2, yolo_1]
+        yolos = [yolo3, yolo2, yolo1]
 
         dummy1 = np.zeros((batches, 1))
         dummy2 = np.zeros((batches, 1))
@@ -92,8 +103,8 @@ class BatchGenerator(Sequence):
                 max_index = -1
                 max_iou = -1
 
-                shifted_box = BoundBox(
-                    0, 0, obj['xmax']-obj['xmin'], obj['ymax']-obj['ymin'])
+                obj_w, obj_h = obj['xmax']-obj['xmin'], obj['ymax']-obj['ymin']
+                shifted_box = BoundBox(0, 0, obj_w, obj_h)
 
                 for i in range(len(self.anchors)):
                     anchor = self.anchors[i]
@@ -115,10 +126,8 @@ class BatchGenerator(Sequence):
                 center_y = center_y / float(net_h) * grid_h  # sigma(t_y) + c_y
 
                 # determine the sizes of the bounding box
-                w = np.log((obj['xmax'] - obj['xmin']) /
-                           float(max_anchor.xmax))  # t_w
-                h = np.log((obj['ymax'] - obj['ymin']) /
-                           float(max_anchor.ymax))  # t_h
+                w = np.log(obj_w / float(max_anchor.xmax))  # t_w
+                h = np.log(obj_h / float(max_anchor.ymax))  # t_h
 
                 box = [center_x, center_y, w, h]
 
@@ -136,8 +145,7 @@ class BatchGenerator(Sequence):
                 yolo[data_count, grid_y, grid_x, max_index % 3, 5+obj_indx] = 1
 
                 # assign the true box to t_batch
-                true_box = [center_x, center_y, obj['xmax'] -
-                            obj['xmin'], obj['ymax'] - obj['ymin']]
+                true_box = [center_x, center_y, obj_w, obj_h]
                 t_batch[data_count, 0, 0, 0, true_box_index] = true_box
 
                 true_box_index += 1
@@ -149,22 +157,14 @@ class BatchGenerator(Sequence):
             # increase data counter in the current batch
             data_count += 1
 
-        output1, output2 = [x_batch, t_batch, yolo_1, yolo_2, yolo_3], [dummy1, dummy2, dummy3]
-        print(x_batch.shape)
-        print(t_batch.shape)
-        print(yolo_1.shape)
-        print(yolo_2.shape)
-        print(yolo_3.shape)
-        print()
-        return [x_batch, t_batch, yolo_1, yolo_2, yolo_3], \
-               [dummy1, dummy2, dummy3]
+        return [x_batch, t_batch, yolo1, yolo2, yolo3], [dummy1, dummy2, dummy3]
 
     def _get_net_size(self, idx):
         if idx % 10 == 0:
             net_size = self.downsample*np.random.randint(
                 self.min_net_size/self.downsample,
                 self.max_net_size/self.downsample+1)
-            print("resizing: ", net_size, net_size)
+            # print("resizing: ", net_size, net_size)
             self.net_h, self.net_w = net_size, net_size
         return self.net_h, self.net_w
 

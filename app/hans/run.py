@@ -17,15 +17,17 @@ tf.config.run_functions_eagerly(True)
 
 def run():
     # Step 0. Config Options
-    epochs = 160
+    epochs = 10
     batch_size = 4
     split_rate = 0.8
     learning_rate = 1e-4
-    run_model = False
-    save_resize = False
-    pretrained_weights = 'data/yolov3-Aerosol.h5'
-    trained_weights = 'data/yolov3-Aerosol.h5'
-    pkl_file = 'data/dataset-Aerosol.pkl'
+    run_model = True
+    save_resize = True
+    show_boxes = True
+    net_shape = (416, 416)
+    pretrained_weights = 'logs/ep020-loss10.5647-val10.7687.h5'
+    trained_weights = 'data/yolov3-0125.h5'
+    pkl_file = 'data/dataset-0125.pkl'
 
     # Step 1 . Load Data
     train_data, valid_data, labels, max_box_per_image, anchors = load_data(
@@ -48,6 +50,7 @@ def run():
         labels=labels,
         max_box_per_image=max_box_per_image,
         batch_size=batch_size,
+        net_shape=net_shape
     )
     valid_generator = BatchGenerator(
         data=valid_data,
@@ -55,6 +58,7 @@ def run():
         labels=labels,
         max_box_per_image=max_box_per_image,
         batch_size=batch_size,
+        net_shape=net_shape
     )
     # Step 3. Model Setting
     print(">> Model Setting")
@@ -82,7 +86,7 @@ def run():
     reduce_lr = ReduceLROnPlateau(factor=0.1, patience=3, verbose=1)
     early_stopping = EarlyStopping(min_delta=0, patience=10, verbose=1)
     checkpoint = ModelCheckpoint(
-        'logs/ep{epoch:03d}-loss{loss:.4f}-val{val_loss:.4f}.h5',
+        'logs/0125-ep{epoch:03d}-loss{loss:.4f}-val{val_loss:.4f}.h5',
         monitor='val_loss',
         save_weights_only=True,
         save_best_only=True,
@@ -112,6 +116,9 @@ def run():
         model=infer_model,
         generator=valid_generator,
         labels=labels,
+        show_boxes=show_boxes,
+        nms_thresh=0.45,
+        net_shape=net_shape,
     )
 
     for label, average_precision in average_precisions.items():

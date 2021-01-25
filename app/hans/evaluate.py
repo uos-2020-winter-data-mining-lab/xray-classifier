@@ -1,12 +1,12 @@
-import cv2
 import numpy as np
 from .evaluate_util import preprocess_input, decode_netout, do_nms, draw_boxes
 
 
 def evaluate(
     model, generator, labels, iou_threshold=0.5, obj_thresh=0.5,
-    nms_thresh=0.45, net_h=416, net_w=416, save_path=None
+    nms_thresh=0.45, net_shape=(416, 832), save_path=None, show_boxes=False
 ):
+    net_h, net_w = net_shape
     num_classes = generator.num_classes()
     anchors = generator.get_anchors()
     # gather all detections and annotations
@@ -17,15 +17,15 @@ def evaluate(
         None for i in range(num_classes)] for j in range(gen_size)]
 
     for i in range(gen_size):
-        show_boxes = False
-        if i % 100 == 0:
-            show_boxes = True
-            print(f"{i} / {gen_size - 1}")
+        show_flags = False
+        if i % 100 == 0 and show_boxes:
+            show_flags = True
+
         image = [generator.load_image(i)]
         # make the boxes and the labels
         pred_boxes = get_yolo_boxes(
             model, image, labels, net_h, net_w, anchors, obj_thresh,
-            nms_thresh, show_boxes
+            nms_thresh, show_flags
         )[0]
 
         score = np.array([box.get_score() for box in pred_boxes])
@@ -57,7 +57,6 @@ def evaluate(
     average_precisions = {}
 
     for label in range(generator.num_classes()):
-        print(f"label : {label}")
         false_positives = np.zeros((0,))
         true_positives = np.zeros((0,))
         scores = np.zeros((0,))
@@ -150,7 +149,7 @@ def get_yolo_boxes(
         # suppress non-maximal boxes
         do_nms(boxes, nms_thresh)
 
-        if show_boxes and i == len(num_images) - 1:
+        if show_boxes and i == (num_images) - 1:
             draw_boxes(images[i], boxes, labels, obj_thresh)
 
         batch_boxes[i] = boxes

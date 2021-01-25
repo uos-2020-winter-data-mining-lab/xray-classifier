@@ -1,3 +1,4 @@
+import os
 import cv2
 import numpy as np
 from scipy.special import expit
@@ -165,7 +166,7 @@ def draw_boxes(image, boxes, labels, obj_thresh, quiet=True):
                 pt1=(box.xmin, box.ymin),
                 pt2=(box.xmax, box.ymax),
                 color=get_color(label),
-                thickness=5
+                thickness=2
             )
             cv2.fillPoly(image, pts=[region], color=get_color(label))
             cv2.putText(
@@ -175,8 +176,10 @@ def draw_boxes(image, boxes, labels, obj_thresh, quiet=True):
                 fontFace=cv2.FONT_HERSHEY_SIMPLEX,
                 fontScale=1e-3 * image.shape[0],
                 color=(0, 0, 0),
-                thickness=2
+                thickness=1
             )
-            cv2.imshow('image', image)
-            cv2.waitKey(0)
+
+    num = len(os.listdir('imgs'))
+    file_name = f'imgs/detected_{num}.png'
+    cv2.imwrite(file_name, image)
     return image

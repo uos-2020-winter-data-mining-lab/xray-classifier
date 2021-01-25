@@ -42,38 +42,33 @@ def load_data(
 def resizing(data, coco_dir, save_resize=False):
     print(">> Resizing ")
     for i, image in enumerate(data):
-        if not os.path.exists(image['path']):
-            continue
-
-        source_img = cv2.imread(image['path'], cv2.IMREAD_COLOR)
+        source_path = image['path']
         image['path'] = image['path'].replace(
             "xray-dataset\\dataset\\", "xray-dataset\\resize\\")
 
+        resize_ratio = 2
         for obj in image['object']:
-            obj['xmax'] = (obj['xmax'] - 8) / 2
-            obj['xmin'] = (obj['xmin'] - 8) / 2
-            obj['ymax'] = (obj['ymax'] - 60) / 2
-            obj['ymin'] = (obj['ymin'] - 60) / 2
-            if obj['xmin'] <= 0:
-                print(image)
-                obj['xmin'] = 0
-            if obj['ymin'] <= 0:
-                print(image)
-                obj['ymin'] = 0
+            obj['xmax'] = (obj['xmax'] - 8) / resize_ratio
+            obj['xmin'] = (obj['xmin'] - 8) / resize_ratio
+            obj['ymax'] = (obj['ymax'] - 60) / resize_ratio
+            obj['ymin'] = (obj['ymin'] - 60) / resize_ratio
 
         if save_resize:
-            cur_dir = "D:\\"
-            for path in image['path'].split("\\")[1:-1]:
-                cur_dir = os.path.join(cur_dir, path)
-                try:
-                    os.mkdir(cur_dir)
-                except FileExistsError:
-                    pass
+            # cur_dir = "D:\\xray-dataset\\"
+            # for path in image['path'].split("\\")[2:-1]:
+            #     cur_dir = os.path.join(cur_dir, path)
+            #     try:
+            #         os.mkdir(cur_dir)
+            #     except FileExistsError:
+            #         pass
 
+            source_img = cv2.imread(source_path, cv2.IMREAD_COLOR)
             cropped = source_img[60:892, 8:1672]
             h, w, _ = cropped.shape
             resized = cv2.resize(
-                cropped, dsize=(w//2, h//2), interpolation=cv2.INTER_AREA)
+                cropped,
+                dsize=(w//resize_ratio, h//resize_ratio),
+                interpolation=cv2.INTER_AREA)
             cv2.imwrite(image['path'], resized)
     return data
 
@@ -118,8 +113,8 @@ def parse_coco_annotation(coco_dir, pkl_file='data/dataset.pkl'):
                 continue
 
             obj['name'] = categories[row['category_id']]
-            if obj['name'] not in ['Aerosol']:
-                continue
+            # if obj['name'] not in ['Aerosol', 'Alcohol']:
+            #     continue
 
             xmin, ymin, w, h = row['bbox']
             xmax = xmin + w
@@ -137,7 +132,6 @@ def parse_coco_annotation(coco_dir, pkl_file='data/dataset.pkl'):
         for i, image in enumerate(images_json):
             if len(image['object']) > 0:
                 all_insts += [image]
-        print(len(all_insts))
 
     cache = {'all_insts': all_insts, 'seen_labels': seen_labels}
     print(f">> Write pkl files {pkl_file}")

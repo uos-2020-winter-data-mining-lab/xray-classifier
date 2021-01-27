@@ -1,3 +1,6 @@
+"""
+Load the Dataset for train YoLo model
+"""
 import os
 import cv2
 import json
@@ -6,29 +9,50 @@ import pickle
 
 
 def load_data(
-    coco_dir=None,
-    split_rate=0.9,
+    coco_dir,
+    image_dir,
+    resize_dir,
     pkl_file=None,
+    split_rate=0.8,
     save_resize=None,
 ):
-    coco_dir = os.path.join('data', 'raw', 'label', 'Train', 'CoCo')
-    data, labels = parse_coco_annotation(coco_dir, pkl_file)
+    """
+    Parameters
+        coco_dir      : Path where CoCo foramat annotation files are stored
+        image_dir     : Path where actual image files are stored
+        resized_dir * : Path where processed image files are stored
+        pkl_file      : Path where preprocessed data file(*.pkl file)
+        split_rate    : Training data and data data split ratio
+        save_resize * : Flag for saving option about resized images
+        (*) Can be modified
+    Returns
+        train_data    : dataset for the train the model
+        valid_data    : dataset for the validate the model
+        labels        : labels(classes) for the prediction
+        max_box_per_image
+                      : Maximum number of objects presents per image
+        anchors       : the Yolo anchors
+    """
 
-    data = resizing(data, coco_dir, save_resize)
+    print("  - Parse CoCo Annotation")
+    data, labels = parse_coco_annotation(
+        coco_dir=coco_dir,
+        pkl_file=pkl_file,
+        image_dir=image_dir,
+        resize_dir=resize_dir
+    )
 
-    train_valid_split = int(split_rate*len(data))
-    np.random.seed(131)
-    np.random.shuffle(data)
-    np.random.seed(None)
+    print("  - Resize the images")
+    data = resizing(data, image_dir, resize_dir, save_resize)
 
-    valid_ints = data[train_valid_split:]
-    train_data = data[:train_valid_split]
+    print("  - shuffle and split the dataset")
+    train_data, valid_data = split_data(data, split_rate)
 
     print(f'>> Train on all seen labels. \n {labels}')
-    labels = labels.keys()
+    labels = sorted(labels.keys())
 
     max_box_per_image = max(
-        [len(data['object']) for data in (data + valid_ints)])
+        [len(img['object']) for img in (train_data + valid_data)])
 
     anchors = [
         10, 13, 16, 30, 33, 23,
@@ -36,106 +60,125 @@ def load_data(
         116, 90, 156, 198, 373, 326
     ]
 
-    return train_data, valid_ints, sorted(labels), max_box_per_image, anchors
+    return train_data, valid_data, labels, max_box_per_image, anchors
 
 
-def resizing(data, coco_dir, save_resize=False):
-    print(">> Resizing ")
-    for i, image in enumerate(data):
-        source_path = image['path']
-        image['path'] = image['path'].replace(
-            "xray-dataset\\dataset\\", "xray-dataset\\resize\\")
+def parse_coco_annotation(coco_dir, pkl_file, image_dir, resize_dir):
+    if pkl_file and os.path.exists(pkl_file):
+        return load_pkl_file(pkl_file)
 
-        resize_ratio = 2
+    print(f">> Load dataset from coco file in ({coco_dir})")
+    data = []
+    seen_labels = {}
+    labels = {}
+
+    for coco_file in sorted(os.listdir(coco_dir)):
+        print(f"- {coco_file}")
+        with open(os.path.join(coco_dir, coco_file), 'rt') as f:
+            data = json.load(f)
+
+        images = data['images']
+        categories = data['categories']
+        annotations = data['annotations']
+
+        for img in images:
+            img_path = os.path.normpath(img['path']).replace("Images", "")
+            img['path'] = image_dir + img_path.split('view')[1]
+            img['object'] = []
+
+        for cat in categories:
+            labels[cat['id']] = cat['name']
+
+        for row in annotations:
+            img_id = int(row['image_id']) - 1
+            if not os.path.exists(images[img_id]['path']):
+                continue
+
+            obj = {}
+            xmin, ymin, w, h = row['bbox']
+            obj['xmin'], obj['xmax'] = xmin, xmin + w
+            obj['ymin'], obj['ymax'] = ymin, ymin + h
+            obj['name'] = labels[row['category_id']]
+
+            images[img_id]['object'] += [obj]
+
+            if obj['name'] not in seen_labels:
+                seen_labels[obj['name']] = 0
+
+            seen_labels[obj['name']] += 1
+
+        for i, image in enumerate(images):
+            if len(image['object']) > 0:
+                data += [image]
+
+    cache = {'data': data, 'seen_labels': seen_labels}
+    write_pkl_file(cache)
+
+    return data, seen_labels
+
+
+def resizing(data, image_dir, resize_dir, save_resize=False):
+    RESIZE_RATIO = 2
+    X_OFFSET, Y_OFFSET = 8, 60
+    for image in data:
+        img_path = image['path']
+
         for obj in image['object']:
-            obj['xmax'] = (obj['xmax'] - 8) / resize_ratio
-            obj['xmin'] = (obj['xmin'] - 8) / resize_ratio
-            obj['ymax'] = (obj['ymax'] - 60) / resize_ratio
-            obj['ymin'] = (obj['ymin'] - 60) / resize_ratio
+            obj['xmax'] = (obj['xmax'] - X_OFFSET) / RESIZE_RATIO
+            obj['xmin'] = (obj['xmin'] - X_OFFSET) / RESIZE_RATIO
+            obj['ymax'] = (obj['ymax'] - Y_OFFSET) / RESIZE_RATIO
+            obj['ymin'] = (obj['ymin'] - Y_OFFSET) / RESIZE_RATIO
 
         if save_resize:
-            # cur_dir = "D:\\xray-dataset\\"
-            # for path in image['path'].split("\\")[2:-1]:
-            #     cur_dir = os.path.join(cur_dir, path)
-            #     try:
-            #         os.mkdir(cur_dir)
-            #     except FileExistsError:
-            #         pass
+            image['path'] = img_path.replace(image_dir, resize_dir)
+            if not os.path.exists(image['path']):
+                source_img = cv2.imread(img_path, cv2.IMREAD_COLOR)
+                cropped = source_img[
+                    Y_OFFSET:Y_OFFSET+832,
+                    X_OFFSET:X_OFFSET+1664
+                ]
+                h, w, _ = cropped.shape
+                resized = cv2.resize(
+                    cropped,
+                    dsize=(w//RESIZE_RATIO, h//RESIZE_RATIO),
+                    interpolation=cv2.INTER_AREA)
 
-            source_img = cv2.imread(source_path, cv2.IMREAD_COLOR)
-            cropped = source_img[60:892, 8:1672]
-            h, w, _ = cropped.shape
-            resized = cv2.resize(
-                cropped,
-                dsize=(w//resize_ratio, h//resize_ratio),
-                interpolation=cv2.INTER_AREA)
-            cv2.imwrite(image['path'], resized)
+                make_path(resize_dir, image['path'])
+                cv2.imwrite(image['path'], resized)
     return data
 
 
-def parse_coco_annotation(coco_dir, pkl_file='data/dataset.pkl'):
-    if pkl_file is not None and os.path.exists(pkl_file):
-        print(f">> Load dataset from {pkl_file} file")
-        with open(pkl_file, 'rb') as handle:
-            cache = pickle.load(handle)
-        return cache['all_insts'], cache['seen_labels']
-    all_insts = []
-    seen_labels = {}
-    categories = {}
+def split_data(data, split_rate):
+    split_pivot = int(split_rate*len(data))
+    np.random.seed(131)
+    np.random.shuffle(data)
+    np.random.seed(None)
 
-    print(">> Load dataset from ")
-    for coco_file in sorted(os.listdir(coco_dir)):
-        print(f"- {coco_file}")
+    train_data = data[:split_pivot]
+    valid_data = data[split_pivot:]
+    return train_data, valid_data
 
-        coco_path = os.path.join(coco_dir, coco_file)
-        with open(coco_path, 'rt') as f:
-            data = json.load(f)
 
-        categories_json = data['categories']
-        for cat in categories_json:
-            categories[cat['id']] = cat['name']
+def load_pkl_file(pkl_file):
+    print(f">> Load dataset from {pkl_file} file")
+    with open(pkl_file, 'rb') as handle:
+        cache = pickle.load(handle)
+    return cache['all_insts'], cache['seen_labels']
 
-        images_json = data['images']
-        obj = {'object': []}
-        for i, image in enumerate(images_json):
-            image['path'] = \
-                "D:\\xray-dataset\\dataset\\" + \
-                image['path'].split('view\\')[1]
-            image['path'] = image['path'].replace("Images\\", "")
-            image['object'] = []
-            del(image['dataset_id'])
 
-        annotations_json = data['annotations']
-        for i, row in enumerate(annotations_json):
-            obj = {}
-            img_id = int(row['image_id']) - 1
-            if not os.path.exists(images_json[img_id]['path']):
-                continue
-
-            obj['name'] = categories[row['category_id']]
-            # if obj['name'] not in ['Aerosol', 'Alcohol']:
-            #     continue
-
-            xmin, ymin, w, h = row['bbox']
-            xmax = xmin + w
-            ymax = ymin + h
-
-            obj['xmin'], obj['xmax'] = xmin, xmax
-            obj['ymin'], obj['ymax'] = ymin, ymax
-            images_json[img_id]['object'] += [obj]
-
-            if obj['name'] in seen_labels:
-                seen_labels[obj['name']] += 1
-            else:
-                seen_labels[obj['name']] = 1
-
-        for i, image in enumerate(images_json):
-            if len(image['object']) > 0:
-                all_insts += [image]
-
-    cache = {'all_insts': all_insts, 'seen_labels': seen_labels}
+def write_pkl_file(pkl_file, cache):
     print(f">> Write pkl files {pkl_file}")
     with open(pkl_file, 'wb') as handle:
         pickle.dump(cache, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    return all_insts, seen_labels
+
+def make_path(resize_dir, file_path):
+    paths = os.path.normpath(file_path).split("\\")[3:-1]
+    if not os.path.exists(os.path.dirname(file_path)):
+        cur_dir = resize_dir
+        for path in paths:
+            cur_dir = os.path.join(cur_dir, path)
+        try:
+            os.mkdir(cur_dir)
+        except FileExistsError:
+            pass

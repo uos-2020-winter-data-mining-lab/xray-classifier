@@ -17,7 +17,13 @@ tf.config.run_functions_eagerly(True)
 
 def run():
     # Step 0. Config Options
-    epochs = 10
+    # Load Data Config
+    coco_dir = os.path.join('data', 'CoCo')
+    image_dir = os.path.join('D:\\', 'xray-dataset', 'dataset')
+    resize_dir = os.path.join('D:\\', 'xray-dataset', 'resize')
+    pkl_file = os.path.join('data', 'dataset-0127.pkl')
+
+    epochs = 1
     batch_size = 4
     split_rate = 0.8
     learning_rate = 1e-4
@@ -25,15 +31,17 @@ def run():
     save_resize = True
     show_boxes = True
     net_shape = (416, 416)
-    pretrained_weights = 'logs/ep020-loss10.5647-val10.7687.h5'
+    pretrained_weights = None
     trained_weights = 'data/yolov3-0125.h5'
-    pkl_file = 'data/dataset-0125.pkl'
 
     # Step 1 . Load Data
+    print(">>Step 1. Load Data")
     train_data, valid_data, labels, max_box_per_image, anchors = load_data(
-        coco_dir=os.path.join('data', 'raw', 'label', 'Train', 'CoCo'),
-        split_rate=split_rate,
+        coco_dir=coco_dir,
+        image_dir=image_dir,
+        resize_dir=resize_dir,
         pkl_file=pkl_file,
+        split_rate=split_rate,
         save_resize=save_resize,
     )
 

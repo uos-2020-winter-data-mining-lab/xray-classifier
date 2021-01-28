@@ -2,13 +2,10 @@ import os
 import tensorflow as tf
 from keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCheckpoint
 
-from app.hans.config import INPUT_SHAPE, BATCH_SIZE
-from app.hans.process.metadata import read_meta_files
-from app.hans.process.process import split, BatchGenerator
-from app.hans.models.yolo import create_model
-# from utils.utils import evaluate
-from .plot import plotting
-
+from app.hans.data import load_data
+from app.hans.generator import BatchGenerator
+from app.hans.yolo_model import create_model
+from app.hans.evaluate import evaluate
 
 config = tf.compat.v1.ConfigProto(
     gpu_options=tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.8))

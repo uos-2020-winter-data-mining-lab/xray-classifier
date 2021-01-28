@@ -1,3 +1,4 @@
+import os
 import tensorflow as tf
 from keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCheckpoint
 
@@ -14,88 +15,132 @@ config = tf.compat.v1.ConfigProto(
 config.gpu_options.allow_growth = True
 session = tf.compat.v1.Session(config=config)
 tf.compat.v1.keras.backend.set_session(session)
+tf.config.run_functions_eagerly(True)
 
 
 def run():
-    # Step 0 . Config
-    log_dir = 'logs/'
-    data, classes, anchors = read_meta_files(meta_dir='data/metadata')
-    input_shape, batch_size = INPUT_SHAPE, BATCH_SIZE
+    # Step 0. Config Options
+    # Load Data Config
+    given_labels = ['Aerosol', 'Alcohol', 'Awl']
+    TAG = f'yolov3-0128-{len(given_labels)}labels'
+    coco_dir = os.path.join('data', 'CoCo')
+    image_dir = os.path.join('D:\\', 'xray-dataset', 'dataset')
+    resize_dir = os.path.join('D:\\', 'xray-dataset', 'resize')
+    pkl_file = os.path.join('data', f'{TAG}.pkl')
+
+    epochs = 1
+    batch_size = 8
+    split_rate = 0.8
+    learning_rate = 1e-4
+    run_model = True
+    save_resize = True
+    show_boxes = True
+    net_shape = (416, 416)
+    pretrained_weights = f'data/{TAG}.h5'
+    trained_weights = f'data/{TAG}.h5'
+
     # Step 1 . Load Data
-    train_data, valid_data = split(data)
+    print(">>Step 1. Load Data")
+    train_data, valid_data, labels, max_box_per_image, anchors = load_data(
+        coco_dir=coco_dir,
+        image_dir=image_dir,
+        resize_dir=resize_dir,
+        pkl_file=pkl_file,
+        split_rate=split_rate,
+        save_resize=save_resize,
+        given_labels=given_labels
+    )
+
+    print(f'\nSplit Rate : {split_rate} ({len(train_data)}, {len(valid_data)})'
+          f'\n{len(labels)} labels : {str(labels)}'
+          f'\nMax box per image : {max_box_per_image}'
+          f'\nBatch size : {batch_size}'
+          f'\nEpochs : {epochs}')
 
     # Step 2. Data Generating
     train_generator = BatchGenerator(
         data=train_data,
         anchors=anchors,
-        labels=classes,
+        labels=labels,
+        max_box_per_image=max_box_per_image,
+        batch_size=batch_size,
+        net_shape=net_shape
     )
     valid_generator = BatchGenerator(
         data=valid_data,
         anchors=anchors,
-        labels=classes,
+        labels=labels,
+        max_box_per_image=max_box_per_image,
+        batch_size=batch_size,
+        net_shape=net_shape
     )
-
     # Step 3. Model Setting
+    print(">> Model Setting")
     train_model, infer_model = create_model(
-        image_input=input_shape,
+        num_classes=len(labels),
         anchors=anchors,
-        num_classes=len(classes),
+        max_box_per_image=max_box_per_image,
         max_grid=[448, 448],
+        batch_size=batch_size,
+        warmup_batches=0,
+        ignore_thresh=0.5,
+        multi_gpu=1,
+        weights=pretrained_weights,
+        learning_rate=learning_rate,
+        grid_scales=[1, 1, 1],
+        obj_scale=5,
+        noobj_scale=1,
+        xywh_scale=1,
+        class_scale=1,
     )
-
     if False:
         train_model.summary(positions=[.35, .65, .73, 1.])
 
     # Step 5. Model Fitting
     reduce_lr = ReduceLROnPlateau(factor=0.1, patience=3, verbose=1)
     early_stopping = EarlyStopping(min_delta=0, patience=10, verbose=1)
-    ModelCheckpoint(
-        log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
+    checkpoint = ModelCheckpoint(
+        'logs/0127-ep{epoch:03d}-loss{val_loss:.4f}.h5',
         monitor='val_loss',
         save_weights_only=True,
         save_best_only=True,
-        save_freq=3
     )
 
-    history = train_model.fit(
-        train_generator,
-        steps_per_epoch=max(1, len(train_data)//batch_size),
-        validation_data=valid_generator,
-        validation_steps=max(1, len(valid_data)//batch_size),
-        epochs=100,
-        callbacks=[reduce_lr, early_stopping],
-    )
+    if run_model:
+        print(">> Model Fitting")
+        try:
+            train_model.fit(
+                train_generator,
+                steps_per_epoch=max(1, len(train_data)//batch_size),
+                validation_data=valid_generator,
+                validation_steps=max(1, len(valid_data)//batch_size),
+                epochs=epochs,
+                callbacks=[checkpoint, reduce_lr, early_stopping],
+            )
+        except KeyboardInterrupt:
+            print("abort!!!")
+            return
 
-    train_model.save_weights('data/trained_yolo.h5')
-    plotting(history)
-    infer_model.load_weights('data/trained_yolo.h5', by_name=True)
+        train_model.save_weights(trained_weights)
 
-    # Step 6. Plotting
-
+    infer_model.load_weights(trained_weights, by_name=True)
     # Step 7. Predict / Evaluate
+    print(">> Evaluate")
+    average_precisions = evaluate(
+        model=infer_model,
+        generator=valid_generator,
+        labels=labels,
+        show_boxes=show_boxes,
+        nms_thresh=0.45,
+        net_shape=net_shape,
+    )
 
-    print("Evaluate")
-    # average_precisions = evaluate(
-    #     model=infer_model,
-    #     data=valid_data,
-    #     generator=valid_generator,
-    #     anchors=anchors,
-    #     num_classes=len(classes)
-    # )
-
-    # for label, average_precision in average_precisions.items():
-    #     print(f'{classes[label]} : {average_precision:.4f}')
-
-    # mAP = sum(average_precisions.values()) / len(average_precisions)
-    # print(f'mAP: {mAP:.4f}')
-
-    # display_image(
-    #     'data//raw//dataset//Astrophysics//Aerosol//Single_Default//'
-    #     'H_8481.80-1090_01_153.png')
+    for label, average_precision in average_precisions.items():
+        print(f'{labels[label]} : {average_precision:.4f}')
 
     # Step 8. Output
-    # print("RUN XRAY DATA \n epochs : {EPOCHS} \n")
+    mAP = sum(average_precisions.values()) / len(average_precisions)
+    print(f'mAP: {mAP:.4f}')
 
 
 if __name__ == '__main__':

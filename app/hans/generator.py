@@ -1,12 +1,11 @@
 import cv2
 import numpy as np
 from keras.utils import Sequence
-from app.hans.bbox import BoundBox, bbox_iou
+from app.hans.bbox import BoundBox
 from .generator_util import (
     apply_random_scale_and_crop,
     random_distort_image,
-    random_flip,
-    correct_bounding_boxes
+    random_flip
 )
 
 

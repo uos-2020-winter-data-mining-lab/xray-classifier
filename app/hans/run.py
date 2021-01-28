@@ -18,14 +18,14 @@ tf.config.run_functions_eagerly(True)
 def run():
     # Step 0. Config Options
     # Load Data Config
-    given_labels = ['Aerosol', 'Alcohol', 'Awl']
+    given_labels = ['Aerosol', 'Alchol', 'Awl']
     TAG = f'yolov3-0128-{len(given_labels)}labels'
     coco_dir = os.path.join('data', 'CoCo')
     image_dir = os.path.join('D:\\', 'xray-dataset', 'dataset')
     resize_dir = os.path.join('D:\\', 'xray-dataset', 'resize')
     pkl_file = os.path.join('data', f'{TAG}.pkl')
 
-    epochs = 1
+    epochs = 4
     batch_size = 8
     split_rate = 0.8
     learning_rate = 1e-4

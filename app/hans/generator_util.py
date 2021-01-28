@@ -9,25 +9,25 @@ def apply_random_scale_and_crop(image, new_w, new_h, net_w, net_h, dx, dy):
     if dx > 0:
         im_sized = np.pad(
             im_sized, ((0, 0), (dx, 0), (0, 0)),
-            mode='constant', constant_values=127)
+            mode='constant', constant_values=255)
     else:
         im_sized = im_sized[:, -dx:, :]
 
     if (new_w + dx) < net_w:
         im_sized = np.pad(
             im_sized, ((0, 0), (0, net_w - (new_w+dx)), (0, 0)),
-            mode='constant', constant_values=127)
+            mode='constant', constant_values=255)
 
     if dy > 0:
         im_sized = np.pad(im_sized, ((dy, 0), (0, 0), (0, 0)),
-                          mode='constant', constant_values=127)
+                          mode='constant', constant_values=255)
     else:
         im_sized = im_sized[-dy:, :, :]
 
     if (new_h + dy) < net_h:
         im_sized = np.pad(
             im_sized, ((0, net_h - (new_h+dy)), (0, 0), (0, 0)),
-            mode='constant', constant_values=127)
+            mode='constant', constant_values=255)
 
     return im_sized[:net_h, :net_w, :]
 

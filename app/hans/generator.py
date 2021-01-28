@@ -42,9 +42,10 @@ class BatchGenerator(Sequence):
         self.shuffle = shuffle
         self.jitter = jitter
         self.norm = norm
+        self.raw_anchors = anchors
         self.anchors = [BoundBox(0, 0, anchors[2*i], anchors[2*i+1])
                         for i in range(len(anchors)//2)]
-        self.num_anchorbox = len(self.anchors) // 3
+        self.num_layers = len(self.anchors) // 3
         self.net_h, self.net_w = net_shape
 
         if shuffle:
@@ -55,18 +56,15 @@ class BatchGenerator(Sequence):
 
     def __getitem__(self, idx):
         # get image input size, change every 10 batches
-        net_h, net_w = self._get_net_size(idx)
-        base_grid_h = net_h // self.downsample
-        base_grid_w = net_w // self.downsample
+        net_shape = net_h, net_w = self._get_net_size(idx)
+        input_shape = np.array((net_h, net_w), dtype='int32')
 
         # determine the first and the last indices of the batch
         l_bound = idx * self.batch_size
         r_bound = (idx+1) * self.batch_size
-
         if r_bound > self.size():
             r_bound = self.size()
             l_bound = r_bound - self.batch_size
-
         batches = r_bound - l_bound
 
         # input images
@@ -75,90 +73,92 @@ class BatchGenerator(Sequence):
         t_batch = np.zeros((batches, 1, 1, 1, self.max_box_per_image, 4))
 
         # initialize the inputs and the outputs
-        yolo1 = self._get_grid_shape(1, base_grid_h, base_grid_w)
-        yolo2 = self._get_grid_shape(2, base_grid_h, base_grid_w)
-        yolo3 = self._get_grid_shape(4, base_grid_h, base_grid_w)
-        yolos = [yolo3, yolo2, yolo1]
+        grid_shapes = input_shape // self.downsample
+        yolos = [
+            self._get_grid_shape(1, grid_shapes),
+            self._get_grid_shape(2, grid_shapes),
+            self._get_grid_shape(4, grid_shapes)
+        ]
         dummy1 = dummy2 = dummy3 = np.zeros((batches, 1))
 
-        data_count = 0
-        true_box_index = 0
+        box_data = []
         # do the logic to fill in the inputs and the output
-        for train_data in self.data[l_bound:r_bound]:
+        for batch, image_data in enumerate(self.data[l_bound:r_bound]):
             # augment input image and fix object's position and size
-            img, all_objs = self._aug_image(train_data, net_h, net_w)
-
-            for obj in all_objs:
-                # find the best anchor box for this object
-                max_anchor = None
-                max_index = -1
-                max_iou = -1
-
-                obj_w, obj_h = obj['xmax']-obj['xmin'], obj['ymax']-obj['ymin']
-                shifted_box = BoundBox(0, 0, obj_w, obj_h)
-
-                for i in range(len(self.anchors)):
-                    anchor = self.anchors[i]
-                    iou = bbox_iou(shifted_box, anchor)
-
-                    if iou > max_iou:
-                        max_anchor = anchor
-                        max_index = i
-                        max_iou = iou
-
-                # determine the yolo to be responsible for this bounding box
-                yolo = yolos[max_index//3]
-                grid_h, grid_w = yolo.shape[1:3]
-
-                # determine the position of the bounding box on the grid
-                center_x = .5*(obj['xmin'] + obj['xmax'])
-                center_x = center_x / float(net_w) * grid_w  # sigma(t_x) + c_x
-                center_y = .5*(obj['ymin'] + obj['ymax'])
-                center_y = center_y / float(net_h) * grid_h  # sigma(t_y) + c_y
-
-                # determine the sizes of the bounding box
-                w = np.log(obj_w / float(max_anchor.xmax))  # t_w
-                h = np.log(obj_h / float(max_anchor.ymax))  # t_h
-
-                box = [center_x, center_y, w, h]
-
-                # determine the index of the label
-                obj_indx = self.labels.index(obj['name'])
-
-                # determine the loc of the cell responsible for this object
-                grid_x = int(np.floor(center_x))
-                grid_y = int(np.floor(center_y))
-
-                # assign ground truth x, y, w, h, confidence and class probs to y_batch
-                cur_index = max_index % 3
-                yolo[data_count, grid_y, grid_x, cur_index % 3] = 0
-                yolo[data_count, grid_y, grid_x, cur_index % 3, 0:4] = box
-                yolo[data_count, grid_y, grid_x, cur_index % 3, 4] = 1.
-                yolo[data_count, grid_y, grid_x, cur_index % 3, 5+obj_indx] = 1
-
-                # assign the true box to t_batch
-                true_box = [center_x, center_y, obj_w, obj_h]
-                t_batch[data_count, 0, 0, 0, true_box_index] = true_box
-
-                true_box_index += 1
-                true_box_index = true_box_index % self.max_box_per_image
-
+            img, boxes = self._aug_image(image_data, net_shape)
             # assign input image to x_batch
-            x_batch[data_count] = self.norm(img)
+            x_batch[batch] = self.norm(img)
+            box_data.append(boxes)
+        box_data = np.array(box_data)
 
-            # increase data counter in the current batch
-            data_count += 1
+        # true boxes
+        true_boxes = np.array(box_data, dtype='float32')
+        boxes_xy = (true_boxes[..., 0:2] + true_boxes[..., 2:4]) // 2
+        boxes_wh = (true_boxes[..., 2:4] - true_boxes[..., 0:2])
+        true_boxes[..., 0:2] = boxes_xy/input_shape[::-1]
+        true_boxes[..., 2:4] = boxes_wh/input_shape[::-1]
 
-        return [x_batch, t_batch, yolo1, yolo2, yolo3], [dummy1, dummy2, dummy3]
+        # anchor
+        anchors = np.array(self.raw_anchors).reshape(-1, 2)
+        anchors = np.expand_dims(anchors, 0)
+        anchor_mask = [[6, 7, 8], [3, 4, 5], [0, 1, 2]]
+        anchor_max = anchors / 2.
+        anchor_min = -anchor_max
+        valid_mask = boxes_wh[..., 0] > 0
 
-    def _get_grid_shape(self, scale, grid_h, grid_w):
+        for batch in range(self.batch_size):
+            wh = boxes_wh[batch, valid_mask[batch]]
+            if len(wh) == 0:
+                continue
+            wh = np.expand_dims(wh, -2)
+            box_max = wh / 2.
+            box_min = -box_max
+
+            intersect_min = np.maximum(box_min, anchor_min)
+            intersect_max = np.minimum(box_max, anchor_max)
+            intersect_wh = np.maximum(intersect_max - intersect_min, 0)
+            intersect_area = intersect_wh[..., 0] * intersect_wh[..., 1]
+            box_area = wh[..., 0] * wh[..., 1]
+            anchor_area = anchors[..., 0] * anchors[..., 1]
+            iou = intersect_area / (box_area + anchor_area - intersect_area)
+
+            best_anchor = np.argmax(iou, axis=-1)
+
+            for t, n in enumerate(best_anchor):
+                for layer in range(self.num_layers):
+                    if n not in anchor_mask[layer]:
+                        continue
+
+                    j = np.floor(
+                        true_boxes[batch, t, 0] * yolos[layer].shape[2]
+                    ).astype('int32')
+                    i = np.floor(
+                        true_boxes[batch, t, 1] * yolos[layer].shape[1]
+                    ).astype('int32')
+                    k = anchor_mask[layer].index(n)
+                    c = true_boxes[batch, t, 4].astype('int32')
+
+                    yolos[layer][batch, j, i, k, 0:4] = true_boxes[batch, t, 0:4]
+                    yolos[layer][batch, j, i, k, 4] = 1
+                    yolos[layer][batch, j, i, k, 5+c] = 1
+                    t_batch[batch, 0, 0, 0, t] = [
+                        true_boxes[batch, t, 0],
+                        true_boxes[batch, t, 1],
+                        box_data[batch][t][2] - box_data[batch][t][0],
+                        box_data[batch][t][3] - box_data[batch][t][1],
+                    ]
+
+        return [x_batch, t_batch, *yolos], [dummy1, dummy2, dummy3]
+
+    def _get_grid_shape(self, scale, grid):
+        grid_h, grid_w = scale * grid
         grid_shape = np.zeros((
             self.batch_size,
-            scale * grid_h,
-            scale * grid_w,
-            self.num_anchorbox,
+            grid_h,
+            grid_w,
+            self.num_layers,
             self.num_classes
-        ))
+        ), dtype='float32')
         return grid_shape
 
     def _get_net_size(self, idx):
@@ -166,52 +166,91 @@ class BatchGenerator(Sequence):
             net_size = self.downsample * np.random.randint(
                 self.min_net_size/self.downsample,
                 self.max_net_size/self.downsample+1)
-            # print("resizing: ", net_size, net_size)
             self.net_h, self.net_w = net_size, net_size
         return self.net_h, self.net_w
 
-    def _aug_image(self, data, net_h, net_w):
+    def _aug_image(self, data, net_shape):
         image_path = data['path']
         image = cv2.imread(image_path)
+        image = image[:, :, ::-1]  # BGR to RGB image
 
-        image = image[:, :, ::-1]  # RGB image
         image_h, image_w, _ = image.shape
+        h, w = net_shape
 
         # determine the amount of scaling and cropping
         dw = self.jitter * image_w
         dh = self.jitter * image_h
-
         new_ar = (image_w + np.random.uniform(-dw, dw)) / \
-            (image_h + np.random.uniform(-dh, dh))
+                 (image_h + np.random.uniform(-dh, dh))
+
         scale = np.random.uniform(0.25, 2)
 
         if (new_ar < 1):
-            new_h = int(scale * net_h)
-            new_w = int(net_h * new_ar)
+            nh = int(scale * h)
+            nw = int(h * new_ar)
         else:
-            new_w = int(scale * net_w)
-            new_h = int(net_w / new_ar)
+            nw = int(scale * w)
+            nh = int(w / new_ar)
 
-        dx = int(np.random.uniform(0, net_w - new_w))
-        dy = int(np.random.uniform(0, net_h - new_h))
+        image = cv2.resize(image, (nw, nh), interpolation=cv2.INTER_CUBIC)
 
+        dx = int(np.random.uniform(0, w - nw))
+        dy = int(np.random.uniform(0, h - nh))
         # apply scaling and cropping
-        im_sized = apply_random_scale_and_crop(
-            image, new_w, new_h, net_w, net_h, dx, dy)
+        image = apply_random_scale_and_crop(
+           image, nw, nh, w, h, dx, dy)
 
         # randomly distort hsv space
-        # im_sized = random_distort_image(im_sized)
+        image = random_distort_image(image)
 
         # randomly flip
         flip = np.random.randint(2)
-        im_sized = random_flip(im_sized, flip)
+        image = random_flip(image, flip)
 
         # correct the size and pos of bounding boxes
-        all_objs = correct_bounding_boxes(
-            data['object'], new_w, new_h, net_w, net_h,
+        box = self._correct_bounding_boxes(
+            data['object'], nw, nh, w, h,
             dx, dy, flip, image_w, image_h)
 
-        return im_sized, all_objs
+        return image, box
+
+    def _correct_bounding_boxes(
+        self, boxes, nw, nh, w, h, dx, dy, flip, iw, ih
+    ):
+        max_boxes = self.max_box_per_image
+        box_data = np.zeros((max_boxes, 5))
+
+        if len(boxes) > 0:
+            # randomize boxes' order
+            np.random.shuffle(boxes)
+
+            # correct sizes and positions
+            box = np.array([[
+                int(b['xmin']),
+                int(b['ymin']),
+                int(b['xmax']),
+                int(b['ymax']),
+                self.labels.index(b['name'])
+            ] for b in boxes])
+
+            box[:, [0, 2]] = box[:, [0, 2]] * nw / iw + dx
+            box[:, [1, 3]] = box[:, [1, 3]] * nh / ih + dy
+
+            if flip == 1:
+                box[:, [0, 2]] = w - box[:, [2, 0]]
+
+            box[:, 0:2][box[:, 0:2] < 0] = 0
+            box[:, 2][box[:, 2] > w] = w
+            box[:, 3][box[:, 3] > h] = h
+            box_w = box[:, 2] - box[:, 0]
+            box_h = box[:, 3] - box[:, 1]
+            # discard invalid box
+            box = box[np.logical_and(box_w > 1, box_h > 1)]
+            if len(box) > max_boxes:
+                box = box[:max_boxes]
+            box_data[:len(box)] = box
+
+        return box_data
 
     def on_epoch_end(self):
         if self.shuffle:

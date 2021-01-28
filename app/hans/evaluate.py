@@ -7,7 +7,7 @@ def evaluate(
     nms_thresh=0.45, net_shape=(416, 832), save_path=None, show_boxes=False
 ):
     net_h, net_w = net_shape
-    num_classes = generator.num_classes()
+    num_classes = generator.num_classes
     anchors = generator.get_anchors()
     # gather all detections and annotations
     gen_size = generator.size()

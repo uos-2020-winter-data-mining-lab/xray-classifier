@@ -106,7 +106,7 @@ def parse_coco_annotation(
             obj = {}
             obj['name'] = labels[row['category_id']]
 
-            if given_labels is not None:
+            if given_labels != []:
                 if obj['name'] not in given_labels:
                     continue
 

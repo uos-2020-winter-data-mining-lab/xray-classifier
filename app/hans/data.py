@@ -6,15 +6,17 @@ import cv2
 import json
 import numpy as np
 import pickle
+from app.hans.anchors import get_anchors
 
 
 def load_data(
     coco_dir,
     image_dir,
-    resize_dir,
+    resize_dir=None,
     pkl_file=None,
     split_rate=0.8,
     save_resize=None,
+    given_labels=None,
 ):
     """
     Parameters
@@ -39,11 +41,16 @@ def load_data(
         coco_dir=coco_dir,
         pkl_file=pkl_file,
         image_dir=image_dir,
-        resize_dir=resize_dir
+        resize_dir=resize_dir,
+        given_labels=given_labels
     )
 
     print("  - Resize the images")
     data = resizing(data, image_dir, resize_dir, save_resize)
+
+    print("  - Get Anchors")
+    anchors = get_anchors(data)
+    max_box_per_image = max([len(img['object']) for img in data])
 
     print("  - shuffle and split the dataset")
     train_data, valid_data = split_data(data, split_rate)
@@ -51,19 +58,21 @@ def load_data(
     print(f'>> Train on all seen labels. \n {labels}')
     labels = sorted(labels.keys())
 
-    max_box_per_image = max(
-        [len(img['object']) for img in (train_data + valid_data)])
-
-    anchors = [
-        10, 13, 16, 30, 33, 23,
-        30, 61, 62, 45, 59, 119,
-        116, 90, 156, 198, 373, 326
-    ]
+    # anchors = [
+    #    45, 46, 53, 131, 100, 159,
+    #    105, 75, 154, 264, 157, 38,
+    #    171, 90, 227, 142, 400, 197,
+    #    # 10, 13, 16, 30, 33, 23,
+    #    # 30, 61, 62, 45, 59, 119,
+    #    # 116, 90, 156, 198, 373, 326
+    # ]
 
     return train_data, valid_data, labels, max_box_per_image, anchors
 
 
-def parse_coco_annotation(coco_dir, pkl_file, image_dir, resize_dir):
+def parse_coco_annotation(
+    coco_dir, pkl_file, image_dir, resize_dir, given_labels
+):
     if pkl_file and os.path.exists(pkl_file):
         return load_pkl_file(pkl_file)
 
@@ -75,11 +84,11 @@ def parse_coco_annotation(coco_dir, pkl_file, image_dir, resize_dir):
     for coco_file in sorted(os.listdir(coco_dir)):
         print(f"- {coco_file}")
         with open(os.path.join(coco_dir, coco_file), 'rt') as f:
-            data = json.load(f)
+            json_data = json.load(f)
 
-        images = data['images']
-        categories = data['categories']
-        annotations = data['annotations']
+        images = json_data['images']
+        categories = json_data['categories']
+        annotations = json_data['annotations']
 
         for img in images:
             img_path = os.path.normpath(img['path']).replace("Images", "")
@@ -95,10 +104,15 @@ def parse_coco_annotation(coco_dir, pkl_file, image_dir, resize_dir):
                 continue
 
             obj = {}
+            obj['name'] = labels[row['category_id']]
+
+            if given_labels is not None:
+                if obj['name'] not in given_labels:
+                    continue
+
             xmin, ymin, w, h = row['bbox']
             obj['xmin'], obj['xmax'] = xmin, xmin + w
             obj['ymin'], obj['ymax'] = ymin, ymin + h
-            obj['name'] = labels[row['category_id']]
 
             images[img_id]['object'] += [obj]
 
@@ -107,12 +121,12 @@ def parse_coco_annotation(coco_dir, pkl_file, image_dir, resize_dir):
 
             seen_labels[obj['name']] += 1
 
-        for i, image in enumerate(images):
-            if len(image['object']) > 0:
-                data += [image]
+        for img in images:
+            if len(img['object']) > 0:
+                data += [img]
 
     cache = {'data': data, 'seen_labels': seen_labels}
-    write_pkl_file(cache)
+    write_pkl_file(pkl_file, cache)
 
     return data, seen_labels
 
@@ -120,6 +134,7 @@ def parse_coco_annotation(coco_dir, pkl_file, image_dir, resize_dir):
 def resizing(data, image_dir, resize_dir, save_resize=False):
     RESIZE_RATIO = 2
     X_OFFSET, Y_OFFSET = 8, 60
+    write_file_count = 0
     for image in data:
         img_path = image['path']
 
@@ -145,6 +160,9 @@ def resizing(data, image_dir, resize_dir, save_resize=False):
 
                 make_path(resize_dir, image['path'])
                 cv2.imwrite(image['path'], resized)
+                write_file_count += 1
+                if write_file_count % 100 == 99:
+                    print(f"write({write_file_count+1}th): {image['path']}")
     return data
 
 
@@ -160,14 +178,14 @@ def split_data(data, split_rate):
 
 
 def load_pkl_file(pkl_file):
-    print(f">> Load dataset from {pkl_file} file")
+    print(f">> Load dataset from ({pkl_file})")
     with open(pkl_file, 'rb') as handle:
         cache = pickle.load(handle)
-    return cache['all_insts'], cache['seen_labels']
+    return cache['data'], cache['seen_labels']
 
 
 def write_pkl_file(pkl_file, cache):
-    print(f">> Write pkl files {pkl_file}")
+    print(f">> Write dataset to ({pkl_file})")
     with open(pkl_file, 'wb') as handle:
         pickle.dump(cache, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -178,7 +196,7 @@ def make_path(resize_dir, file_path):
         cur_dir = resize_dir
         for path in paths:
             cur_dir = os.path.join(cur_dir, path)
-        try:
-            os.mkdir(cur_dir)
-        except FileExistsError:
-            pass
+            try:
+                os.mkdir(cur_dir)
+            except FileExistsError:
+                pass

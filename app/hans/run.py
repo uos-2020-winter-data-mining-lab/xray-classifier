@@ -18,21 +18,23 @@ tf.config.run_functions_eagerly(True)
 def run():
     # Step 0. Config Options
     # Load Data Config
+    given_labels = ['Aerosol', 'Alcohol', 'Awl']
+    TAG = f'yolov3-0128-{len(given_labels)}labels'
     coco_dir = os.path.join('data', 'CoCo')
     image_dir = os.path.join('D:\\', 'xray-dataset', 'dataset')
     resize_dir = os.path.join('D:\\', 'xray-dataset', 'resize')
-    pkl_file = os.path.join('data', 'dataset-0127.pkl')
+    pkl_file = os.path.join('data', f'{TAG}.pkl')
 
     epochs = 1
-    batch_size = 4
+    batch_size = 8
     split_rate = 0.8
     learning_rate = 1e-4
     run_model = True
     save_resize = True
     show_boxes = True
     net_shape = (416, 416)
-    pretrained_weights = None
-    trained_weights = 'data/yolov3-0125.h5'
+    pretrained_weights = f'data/{TAG}.h5'
+    trained_weights = f'data/{TAG}.h5'
 
     # Step 1 . Load Data
     print(">>Step 1. Load Data")
@@ -43,6 +45,7 @@ def run():
         pkl_file=pkl_file,
         split_rate=split_rate,
         save_resize=save_resize,
+        given_labels=given_labels
     )
 
     print(f'\nSplit Rate : {split_rate} ({len(train_data)}, {len(valid_data)})'
@@ -94,7 +97,7 @@ def run():
     reduce_lr = ReduceLROnPlateau(factor=0.1, patience=3, verbose=1)
     early_stopping = EarlyStopping(min_delta=0, patience=10, verbose=1)
     checkpoint = ModelCheckpoint(
-        'logs/0125-ep{epoch:03d}-loss{loss:.4f}-val{val_loss:.4f}.h5',
+        'logs/0127-ep{epoch:03d}-loss{val_loss:.4f}.h5',
         monitor='val_loss',
         save_weights_only=True,
         save_best_only=True,

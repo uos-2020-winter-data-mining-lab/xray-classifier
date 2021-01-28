@@ -23,16 +23,18 @@ class BatchGenerator(Sequence):
         downsample=32,
         max_box_per_image=30,
         batch_size=16,
-        min_net_size=448,
-        max_net_size=448,
+        min_net_size=416,
+        max_net_size=416,
         net_shape=(416, 416),
-        shuffle=False,
+        shuffle=True,
         jitter=0.1,
         norm=normalize
     ):
         self.data = data
         self.batch_size = batch_size
         self.labels = labels
+        self.num_classes = 4 + 1 + len(self.labels)
+
         self.downsample = downsample
         self.max_box_per_image = max_box_per_image
         self.min_net_size = (min_net_size//self.downsample)*self.downsample
@@ -42,7 +44,9 @@ class BatchGenerator(Sequence):
         self.norm = norm
         self.anchors = [BoundBox(0, 0, anchors[2*i], anchors[2*i+1])
                         for i in range(len(anchors)//2)]
+        self.num_anchorbox = len(self.anchors) // 3
         self.net_h, self.net_w = net_shape
+
         if shuffle:
             np.random.shuffle(self.data)
 
@@ -52,15 +56,15 @@ class BatchGenerator(Sequence):
     def __getitem__(self, idx):
         # get image input size, change every 10 batches
         net_h, net_w = self._get_net_size(idx)
-        base_grid_h = net_h//self.downsample
-        base_grid_w = net_w//self.downsample
+        base_grid_h = net_h // self.downsample
+        base_grid_w = net_w // self.downsample
 
         # determine the first and the last indices of the batch
-        l_bound = idx*self.batch_size
+        l_bound = idx * self.batch_size
         r_bound = (idx+1) * self.batch_size
 
-        if r_bound > len(self.data):
-            r_bound = len(self.data)
+        if r_bound > self.size():
+            r_bound = self.size()
             l_bound = r_bound - self.batch_size
 
         batches = r_bound - l_bound
@@ -71,27 +75,14 @@ class BatchGenerator(Sequence):
         t_batch = np.zeros((batches, 1, 1, 1, self.max_box_per_image, 4))
 
         # initialize the inputs and the outputs
-        # desired network output 1
-        yolo1 = np.zeros((
-            batches, 1*base_grid_h,  1*base_grid_w,
-            len(self.anchors)//3, 5+len(self.labels)))
-        # desired network output 2
-        yolo2 = np.zeros((
-            batches, 2*base_grid_h,  2*base_grid_w,
-            len(self.anchors)//3, 5+len(self.labels)))
-        # desired network output 3
-        yolo3 = np.zeros((
-            batches, 4*base_grid_h,  4*base_grid_w,
-            len(self.anchors)//3, 5+len(self.labels)))
+        yolo1 = self._get_grid_shape(1, base_grid_h, base_grid_w)
+        yolo2 = self._get_grid_shape(2, base_grid_h, base_grid_w)
+        yolo3 = self._get_grid_shape(4, base_grid_h, base_grid_w)
         yolos = [yolo3, yolo2, yolo1]
-
-        dummy1 = np.zeros((batches, 1))
-        dummy2 = np.zeros((batches, 1))
-        dummy3 = np.zeros((batches, 1))
+        dummy1 = dummy2 = dummy3 = np.zeros((batches, 1))
 
         data_count = 0
         true_box_index = 0
-
         # do the logic to fill in the inputs and the output
         for train_data in self.data[l_bound:r_bound]:
             # augment input image and fix object's position and size
@@ -110,7 +101,7 @@ class BatchGenerator(Sequence):
                     anchor = self.anchors[i]
                     iou = bbox_iou(shifted_box, anchor)
 
-                    if max_iou < iou:
+                    if iou > max_iou:
                         max_anchor = anchor
                         max_index = i
                         max_iou = iou
@@ -139,10 +130,11 @@ class BatchGenerator(Sequence):
                 grid_y = int(np.floor(center_y))
 
                 # assign ground truth x, y, w, h, confidence and class probs to y_batch
-                yolo[data_count, grid_y, grid_x, max_index % 3] = 0
-                yolo[data_count, grid_y, grid_x, max_index % 3, 0:4] = box
-                yolo[data_count, grid_y, grid_x, max_index % 3, 4] = 1.
-                yolo[data_count, grid_y, grid_x, max_index % 3, 5+obj_indx] = 1
+                cur_index = max_index % 3
+                yolo[data_count, grid_y, grid_x, cur_index % 3] = 0
+                yolo[data_count, grid_y, grid_x, cur_index % 3, 0:4] = box
+                yolo[data_count, grid_y, grid_x, cur_index % 3, 4] = 1.
+                yolo[data_count, grid_y, grid_x, cur_index % 3, 5+obj_indx] = 1
 
                 # assign the true box to t_batch
                 true_box = [center_x, center_y, obj_w, obj_h]
@@ -159,9 +151,19 @@ class BatchGenerator(Sequence):
 
         return [x_batch, t_batch, yolo1, yolo2, yolo3], [dummy1, dummy2, dummy3]
 
+    def _get_grid_shape(self, scale, grid_h, grid_w):
+        grid_shape = np.zeros((
+            self.batch_size,
+            scale * grid_h,
+            scale * grid_w,
+            self.num_anchorbox,
+            self.num_classes
+        ))
+        return grid_shape
+
     def _get_net_size(self, idx):
         if idx % 10 == 0:
-            net_size = self.downsample*np.random.randint(
+            net_size = self.downsample * np.random.randint(
                 self.min_net_size/self.downsample,
                 self.max_net_size/self.downsample+1)
             # print("resizing: ", net_size, net_size)
@@ -171,8 +173,6 @@ class BatchGenerator(Sequence):
     def _aug_image(self, data, net_h, net_w):
         image_path = data['path']
         image = cv2.imread(image_path)
-        if image is None:
-            print('Cannot find ', image_path)
 
         image = image[:, :, ::-1]  # RGB image
         image_h, image_w, _ = image.shape
@@ -200,7 +200,7 @@ class BatchGenerator(Sequence):
             image, new_w, new_h, net_w, net_h, dx, dy)
 
         # randomly distort hsv space
-        im_sized = random_distort_image(im_sized)
+        # im_sized = random_distort_image(im_sized)
 
         # randomly flip
         flip = np.random.randint(2)

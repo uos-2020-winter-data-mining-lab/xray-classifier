@@ -155,10 +155,10 @@ def draw_boxes(image, boxes, labels, obj_thresh, quiet=True):
             )
             width, height = text_size[0][0], text_size[0][1]
             region = np.array([
-                [box.xmin-3, box.ymin],
-                [box.xmin-3, box.ymin-height-26],
-                [box.xmin+width+13, box.ymin-height-26],
-                [box.xmin+width+13, box.ymin]
+                [box.xmin-1, box.ymin],
+                [box.xmin-1, box.ymin-height-10],
+                [box.xmin+width, box.ymin-height-10],
+                [box.xmin+width, box.ymin]
             ], dtype='int32')
 
             cv2.rectangle(
@@ -172,7 +172,7 @@ def draw_boxes(image, boxes, labels, obj_thresh, quiet=True):
             cv2.putText(
                 image,
                 text=label_str,
-                org=(box.xmin+13, box.ymin - 13),
+                org=(box.xmin+5, box.ymin-7),
                 fontFace=cv2.FONT_HERSHEY_SIMPLEX,
                 fontScale=1e-3 * image.shape[0],
                 color=(0, 0, 0),

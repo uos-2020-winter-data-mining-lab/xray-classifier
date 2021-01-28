@@ -45,7 +45,7 @@ def create_model(
         class_scale=class_scale
     )
 
-    if os.path.exists(weights):
+    if weights is not None and os.path.exists(weights):
         print(f"pretrained weights {weights} is loaded")
         train_model.load_weights(weights, by_name=True)
 

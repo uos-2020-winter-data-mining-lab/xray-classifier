@@ -18,15 +18,15 @@ tf.config.run_functions_eagerly(True)
 def run():
     # Step 0. Config Options
     # Load Data Config
-    given_labels = ['Aerosol', 'Alchol', 'Awl']
-    TAG = f'yolov3-0128-{len(given_labels)}labels'
+    given_labels = ['Alcohol']  # ['Alcohol']
+    TAG = f'{len(given_labels)}labels-0129'
     coco_dir = os.path.join('data', 'CoCo')
     image_dir = os.path.join('D:\\', 'xray-dataset', 'dataset')
     resize_dir = os.path.join('D:\\', 'xray-dataset', 'resize')
     pkl_file = os.path.join('data', f'{TAG}.pkl')
 
-    epochs = 4
-    batch_size = 8
+    epochs = 2
+    batch_size = 4
     split_rate = 0.8
     learning_rate = 1e-4
     run_model = True
@@ -97,7 +97,7 @@ def run():
     reduce_lr = ReduceLROnPlateau(factor=0.1, patience=3, verbose=1)
     early_stopping = EarlyStopping(min_delta=0, patience=10, verbose=1)
     checkpoint = ModelCheckpoint(
-        'logs/0127-ep{epoch:03d}-loss{val_loss:.4f}.h5',
+        'data/h5/1labels-ep{epoch:03d}-loss{val_loss:.4f}.h5',
         monitor='val_loss',
         save_weights_only=True,
         save_best_only=True,
@@ -114,13 +114,13 @@ def run():
                 epochs=epochs,
                 callbacks=[checkpoint, reduce_lr, early_stopping],
             )
+            train_model.save_weights(trained_weights)
         except KeyboardInterrupt:
             print("abort!!!")
             return
 
-        train_model.save_weights(trained_weights)
-
     infer_model.load_weights(trained_weights, by_name=True)
+
     # Step 7. Predict / Evaluate
     print(">> Evaluate")
     average_precisions = evaluate(
@@ -133,11 +133,13 @@ def run():
     )
 
     for label, average_precision in average_precisions.items():
-        print(f'{labels[label]} : {average_precision:.4f}')
+        # print(f'{labels[label]} : {average_precision:.4f}')
+        if label < len(labels):
+            print(f'label {label} : {(average_precision*100):.2f}%')
 
     # Step 8. Output
-    mAP = sum(average_precisions.values()) / len(average_precisions)
-    print(f'mAP: {mAP:.4f}')
+    mAP = sum(average_precisions.values()) / (len(average_precisions) - 5)
+    print(f'mAP: {(mAP*100):.2f}%')
 
 
 if __name__ == '__main__':

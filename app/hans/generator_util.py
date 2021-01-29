@@ -1,4 +1,5 @@
 import cv2
+import copy
 import numpy as np
 
 
@@ -63,9 +64,43 @@ def random_flip(image, flip):
         return cv2.flip(image, 1)
     return image
 
+
 def _constrain(min_v, max_v, value):
     if value < min_v:
         return min_v
     if value > max_v:
         return max_v
     return value
+
+
+def correct_bounding_boxes(
+    boxes, new_w, new_h, net_w, net_h, dx, dy, flip, image_w, image_h
+):
+    boxes = copy.deepcopy(boxes)
+
+    # randomize boxes' order
+    np.random.shuffle(boxes)
+
+    # correct sizes and positions
+    sx, sy = float(new_w)/image_w, float(new_h)/image_h
+    zero_boxes = []
+
+    for i in range(len(boxes)):
+        boxes[i]['xmin'] = int(_constrain(0, net_w, boxes[i]['xmin']*sx + dx))
+        boxes[i]['xmax'] = int(_constrain(0, net_w, boxes[i]['xmax']*sx + dx))
+        boxes[i]['ymin'] = int(_constrain(0, net_h, boxes[i]['ymin']*sy + dy))
+        boxes[i]['ymax'] = int(_constrain(0, net_h, boxes[i]['ymax']*sy + dy))
+
+        if boxes[i]['xmax'] <= boxes[i]['xmin'] or \
+           boxes[i]['ymax'] <= boxes[i]['ymin']:
+            zero_boxes += [i]
+            continue
+
+        if flip == 1:
+            swap = boxes[i]['xmin']
+            boxes[i]['xmin'] = net_w - boxes[i]['xmax']
+            boxes[i]['xmax'] = net_w - swap
+
+    boxes = [boxes[i] for i in range(len(boxes)) if i not in zero_boxes]
+
+    return boxes

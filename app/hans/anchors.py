@@ -1,3 +1,4 @@
+import os
 import numpy as np
 
 
@@ -74,18 +75,28 @@ def save_anchors(data):
                 x_y = ", %d,%d" % (data[i][0], data[i][1])
             f.write(x_y)
 
-    print(anchors)
     return anchors
 
 
 def get_anchors(data):
     cluster_number = 9
-
     all_boxes = txt2boxes(data)
-    result = kmeans(all_boxes, k=cluster_number)
-    result = result[np.lexsort(result.T[0, None])]
+
+    if os.path.exists('yolo_anchors.txt'):
+        with open('yolo_anchors.txt') as f:
+            data = f.readline()
+
+        anchors = list()
+        for anchor in data.split(","):
+            anchors.append(int(anchor.lstrip(' ')))
+        return anchors
+    else:
+        result = kmeans(all_boxes, k=cluster_number)
+        result = result[np.lexsort(result.T[0, None])]
+        anchors = save_anchors(result)
+
     avg_iou = get_avg_iou(all_boxes, result, cluster_number) * 100
 
     print(f" Anchor Accuracy: {avg_iou:.2f}%")
 
-    return save_anchors(result)
+    return anchors

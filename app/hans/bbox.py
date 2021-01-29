@@ -29,16 +29,16 @@ class BoundBox:
         return self.score
 
 
-def bbox_iou(box1, box2):
+def bbox_iou(box, anchor):
     intersect_w = _interval_overlap(
-        [box1.xmin, box1.xmax], [box2.xmin, box2.xmax])
+        [box.xmin, box.xmax], [anchor.xmin, anchor.xmax])
     intersect_h = _interval_overlap(
-        [box1.ymin, box1.ymax], [box2.ymin, box2.ymax])
+        [box.ymin, box.ymax], [anchor.ymin, anchor.ymax])
 
     intersect = intersect_w * intersect_h
 
-    w1, h1 = box1.xmax-box1.xmin, box1.ymax-box1.ymin
-    w2, h2 = box2.xmax-box2.xmin, box2.ymax-box2.ymin
+    w1, h1 = box.xmax-box.xmin, box.ymax-box.ymin
+    w2, h2 = anchor.xmax-anchor.xmin, anchor.ymax-anchor.ymin
 
     union = w1*h1 + w2*h2 - intersect
 

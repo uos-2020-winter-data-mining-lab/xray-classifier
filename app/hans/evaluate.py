@@ -56,7 +56,7 @@ def evaluate(
     # compute mAP by comparing all detections and all annotations
     average_precisions = {}
 
-    for label in range(generator.num_classes()):
+    for label in range(num_classes):
         false_positives = np.zeros((0,))
         true_positives = np.zeros((0,))
         scores = np.zeros((0,))

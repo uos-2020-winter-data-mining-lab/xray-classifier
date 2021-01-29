@@ -161,8 +161,8 @@ def resizing(data, image_dir, resize_dir, save_resize=False):
                 make_path(resize_dir, image['path'])
                 cv2.imwrite(image['path'], resized)
                 write_file_count += 1
-                if write_file_count % 100 == 99:
-                    print(f"write({write_file_count+1}th): {image['path']}")
+                #if write_file_count % 100 == 99:
+                print(f"write({write_file_count+1}th): {image['path']}")
     return data
 
 

@@ -97,6 +97,6 @@ def get_anchors(data):
 
     avg_iou = get_avg_iou(all_boxes, result, cluster_number) * 100
 
-    print(f" Anchor Accuracy: {avg_iou:.2f}%")
+    print(f"  - anchor accuracy: {avg_iou:.2f}%")
 
     return anchors

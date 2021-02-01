@@ -1,25 +1,25 @@
 import numpy as np
-from .evaluate_util import preprocess_input, decode_netout, do_nms, draw_boxes
+from .evaluate_util import (
+    preprocess_input, decode_netout, do_nms, draw_boxes
+)
+from timeit import default_timer as timer
 
 
 def evaluate(
-    model, generator, labels, iou_threshold=0.5, obj_thresh=0.5,
-    nms_thresh=0.45, net_shape=(416, 832), save_path=None, show_boxes=False
+    model, generator, labels, anchors, iou_threshold=0.25, obj_thresh=0.2,
+    nms_thresh=0.45, net_shape=(416, 416), save_path=None, show_boxes=False
 ):
     net_h, net_w = net_shape
-    num_classes = generator.num_classes()
-    anchors = generator.get_anchors()
+    num_classes = generator.num_classes
+
     # gather all detections and annotations
     gen_size = generator.size()
-    all_detections = [[
-        None for i in range(num_classes)] for j in range(gen_size)]
-    all_annotations = [[
-        None for i in range(num_classes)] for j in range(gen_size)]
+    all_detections = [[None for i in range(num_classes)] for j in range(gen_size)]
+    all_annotations = [[None for i in range(num_classes)] for j in range(gen_size)]
 
+    start = end = timer()
     for i in range(gen_size):
-        show_flags = False
-        if i % 100 == 0 and show_boxes:
-            show_flags = True
+        show_flags = (i % 100 == 0 and show_boxes)
 
         image = [generator.load_image(i)]
         # make the boxes and the labels
@@ -30,7 +30,7 @@ def evaluate(
 
         score = np.array([box.get_score() for box in pred_boxes])
         pred_labels = np.array([box.label for box in pred_boxes])
-        # print("score and labels: ", score, pred_labels)
+
         if len(pred_boxes) > 0:
             pred_boxes = np.array([
                 [box.xmin, box.ymin, box.xmax, box.ymax, box.get_score()]
@@ -52,6 +52,11 @@ def evaluate(
         for label in range(num_classes):
             all_annotations[i][label] = \
                 annotations[annotations[:, 4] == label, :4].copy()
+
+        if i % 100 == 0:
+            current = end
+            end = timer()
+            print(f"{i:4d}th time {(end - current):.3f}, {(end - start):.3f}")
 
     # compute mAP by comparing all detections and all annotations
     average_precisions = {}

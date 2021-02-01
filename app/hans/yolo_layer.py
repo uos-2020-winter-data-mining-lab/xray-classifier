@@ -31,9 +31,9 @@ class YoloLayer(Layer):
         # make a persistent mesh grid
         max_grid_h, max_grid_w = max_grid
 
-        cell_x = to_float(
+        cell_x = tf.cast((
             tf.reshape(tf.tile(tf.range(max_grid_w), [max_grid_h]),
-                       (1, max_grid_h, max_grid_w, 1, 1)))
+                       (1, max_grid_h, max_grid_w, 1, 1))), tf.float32)
         cell_y = tf.transpose(cell_x, (0, 2, 1, 3, 4))
         self.cell_grid = tf.tile(
             tf.concat([cell_x, cell_y], -1), [batch_size, 1, 1, 3, 1])
@@ -47,7 +47,6 @@ class YoloLayer(Layer):
     def call(self, x):
         input_image, y_pred, y_true, true_boxes = x
 
-        # adjust the shape of the y_predict [batch, grid_h, grid_w, 3, 4+1+nb_class]
         y_pred = tf.reshape(y_pred, tf.concat(
             [tf.shape(y_pred)[:3], tf.constant([3, -1])], axis=0))
 
@@ -123,8 +122,8 @@ class YoloLayer(Layer):
         iou_scores = tf.truediv(intersect_areas, union_areas)
 
         best_ious = tf.reduce_max(iou_scores, axis=4)
-        conf_delta *= tf.expand_dims(to_float(best_ious <
-                                                 self.ignore_thresh), 4)
+        conf_delta *= tf.expand_dims(
+            tf.cast((best_ious < self.ignore_thresh), tf.float32), 4)
 
         """
         Compute some online statistics
@@ -195,12 +194,4 @@ class YoloLayer(Layer):
         loss_class = tf.reduce_sum(class_delta, list(range(1, 5)))
 
         loss = loss_xy + loss_wh + loss_conf + loss_class
-        return loss*self.grid_scale
-
-    def compute_output_shape(self, input_shape):
-        print("compute : ")
-        return [(None, 1)]
-
-
-def to_float(x):
-    return tf.cast(x, dtype=tf.float32)
+        return loss * self.grid_scale

@@ -40,9 +40,8 @@ def make_residual_blocks(inputs, filters, num_blocks, id):
     id = id + 3
     for i in range(num_blocks-1):
         inputs = yolo_block(inputs, [
-            yolo_layer(filters//2, kernel=1, stride=1,
-                      BN=True, LRU=True, id=id+i*3),
-            yolo_layer(filters,    kernel=3, stride=1, BN=True, LRU=True, id=id+i*3+1)])
+            yolo_layer(filters//2, kernel=1, stride=1, BN=True, LRU=True, id=id+i*3),
+            yolo_layer(filters, kernel=3, stride=1, BN=True, LRU=True, id=id+i*3+1)])
 
     return inputs
 
@@ -61,12 +60,10 @@ def yolo_layer(filter, kernel, stride, BN=False, LRU=False, id=None):
 
 def yolo_block(inputs, layers, skip=True):
     x = inputs
-    count = 0
 
-    for layer in layers:
+    for count, layer in enumerate(layers):
         if skip and count == (len(layers) - 2):
             skip_connection = x
-        count += 1
 
         if layer['stride'] > 1:
             # peculiar padding as darknet prefer left and top

@@ -48,6 +48,8 @@ def create_model(
     if weights is not None and os.path.exists(weights):
         print(f"pretrained weights {weights} is loaded")
         train_model.load_weights(weights, by_name=True)
+        # for layer in range(185):
+        #     train_model.layers[layer].trainable = False
 
     train_model.compile(loss=dummy_loss, optimizer=Adam(lr=learning_rate))
 
@@ -140,5 +142,4 @@ def make_yolov3_model(
 
 
 def dummy_loss(y_true, y_pred):
-    loss = tf.sqrt(tf.reduce_sum(y_pred))
-    return loss
+    return y_pred

@@ -52,21 +52,14 @@ def load_data(
     anchors = get_anchors(data)
     max_box_per_image = max([len(img['object']) for img in data])
 
-    print("  - shuffle and split the dataset")
+    print(f"  - shuffle and split the dataset ({split_rate})")
     train_data, valid_data = split_data(data, split_rate)
 
-    print(f'>> Train on all seen labels. \n {labels}')
+    print(f'  - Train on all seen {len(labels)} labels. \n {labels}')
     labels = sorted(labels.keys())
 
-    # anchors = [
-    #    45, 46, 53, 131, 100, 159,
-    #    105, 75, 154, 264, 157, 38,
-    #    171, 90, 227, 142, 400, 197,
-    #    # 10, 13, 16, 30, 33, 23,
-    #    # 30, 61, 62, 45, 59, 119,
-    #    # 116, 90, 156, 198, 373, 326
-    # ]
-
+    print(f'  - Train on {len(train_data)} and Valid on {len(valid_data)}')
+    print(f"  - Max box per image ({max_box_per_image})")
     return train_data, valid_data, labels, max_box_per_image, anchors
 
 
@@ -76,10 +69,10 @@ def parse_coco_annotation(
     if pkl_file and os.path.exists(pkl_file):
         return load_pkl_file(pkl_file)
 
-    print(f">> Load dataset from coco file in ({coco_dir})")
+    print(f"  - Load dataset from coco file in ({coco_dir})")
     data = []
-    seen_labels = {}
     labels = {}
+    seen_labels = {}
 
     for coco_file in sorted(os.listdir(coco_dir)):
         print(f"- {coco_file}")
@@ -97,6 +90,7 @@ def parse_coco_annotation(
 
         for cat in categories:
             labels[cat['id']] = cat['name']
+            seen_labels[cat['name']] = 0
 
         for row in annotations:
             img_id = int(row['image_id']) - 1
@@ -105,21 +99,16 @@ def parse_coco_annotation(
 
             obj = {}
             obj['name'] = labels[row['category_id']]
+            if given_labels != [] and obj['name'] not in given_labels:
+                continue
 
-            if given_labels != []:
-                if obj['name'] not in given_labels:
-                    continue
+            seen_labels[obj['name']] += 1
 
             xmin, ymin, w, h = row['bbox']
             obj['xmin'], obj['xmax'] = xmin, xmin + w
             obj['ymin'], obj['ymax'] = ymin, ymin + h
 
             images[img_id]['object'] += [obj]
-
-            if obj['name'] not in seen_labels:
-                seen_labels[obj['name']] = 0
-
-            seen_labels[obj['name']] += 1
 
         for img in images:
             if len(img['object']) > 0:
@@ -135,6 +124,7 @@ def resizing(data, image_dir, resize_dir, save_resize=False):
     RESIZE_RATIO = 2
     X_OFFSET, Y_OFFSET = 8, 60
     write_file_count = 0
+    print(f"- Resizing {len(data)} images")
     for image in data:
         img_path = image['path']
 
@@ -147,11 +137,16 @@ def resizing(data, image_dir, resize_dir, save_resize=False):
         if save_resize:
             image['path'] = img_path.replace(image_dir, resize_dir)
             if not os.path.exists(image['path']):
-                source_img = cv2.imread(img_path, cv2.IMREAD_COLOR)
-                cropped = source_img[
-                    Y_OFFSET:Y_OFFSET+832,
-                    X_OFFSET:X_OFFSET+1664
-                ]
+                try:
+                    source_img = cv2.imread(img_path, cv2.IMREAD_COLOR)
+                    cropped = source_img[
+                        Y_OFFSET:Y_OFFSET+832,
+                        X_OFFSET:X_OFFSET+1664
+                    ]
+                except TypeError:
+                    print(img_path)
+                    os.remove(img_path)
+                    continue
                 h, w, _ = cropped.shape
                 resized = cv2.resize(
                     cropped,
@@ -161,8 +156,8 @@ def resizing(data, image_dir, resize_dir, save_resize=False):
                 make_path(resize_dir, image['path'])
                 cv2.imwrite(image['path'], resized)
                 write_file_count += 1
-                #if write_file_count % 100 == 99:
-                print(f"write({write_file_count+1}th): {image['path']}")
+                if write_file_count % 100 == 99:
+                    print(f"write({write_file_count+1}th): {image['path']}")
     return data
 
 

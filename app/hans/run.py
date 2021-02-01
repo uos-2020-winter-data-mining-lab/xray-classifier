@@ -8,7 +8,7 @@ from app.hans.yolo_model import create_model
 from app.hans.evaluate import evaluate
 
 config = tf.compat.v1.ConfigProto(
-    gpu_options=tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=0.8))
+    gpu_options=tf.compat.v1.GPUOptions(per_process_gpu_memory_fraction=1))
 config.gpu_options.allow_growth = True
 session = tf.compat.v1.Session(config=config)
 tf.compat.v1.keras.backend.set_session(session)
@@ -18,26 +18,27 @@ tf.config.run_functions_eagerly(True)
 def run():
     # Step 0. Config Options
     # Load Data Config
-    given_labels = ['Alcohol']  # ['Alcohol']
-    TAG = f'{len(given_labels)}labels-0129'
+    given_labels = []  # , 'Bullet']
+    TAG = f'{len(given_labels)}labels-0201'
     coco_dir = os.path.join('data', 'CoCo')
     image_dir = os.path.join('D:\\', 'xray-dataset', 'dataset')
     resize_dir = os.path.join('D:\\', 'xray-dataset', 'resize')
     pkl_file = os.path.join('data', f'{TAG}.pkl')
+    TAG = '0201'
 
-    epochs = 2
+    epochs = 5
     batch_size = 4
     split_rate = 0.8
     learning_rate = 1e-4
     run_model = True
     save_resize = True
     show_boxes = True
-    net_shape = (416, 416)
+    net_shape = (320, 320)
     pretrained_weights = f'data/{TAG}.h5'
     trained_weights = f'data/{TAG}.h5'
 
     # Step 1 . Load Data
-    print(">>Step 1. Load Data")
+    print(">> Step 1. Load Data")
     train_data, valid_data, labels, max_box_per_image, anchors = load_data(
         coco_dir=coco_dir,
         image_dir=image_dir,
@@ -47,12 +48,6 @@ def run():
         save_resize=save_resize,
         given_labels=given_labels
     )
-
-    print(f'\nSplit Rate : {split_rate} ({len(train_data)}, {len(valid_data)})'
-          f'\n{len(labels)} labels : {str(labels)}'
-          f'\nMax box per image : {max_box_per_image}'
-          f'\nBatch size : {batch_size}'
-          f'\nEpochs : {epochs}')
 
     # Step 2. Data Generating
     train_generator = BatchGenerator(
@@ -73,20 +68,23 @@ def run():
     )
     # Step 3. Model Setting
     print(">> Model Setting")
+    print(f'\nBatch size : {batch_size}'
+          f'\nEpochs : {epochs}')
+
     train_model, infer_model = create_model(
         num_classes=len(labels),
         anchors=anchors,
         max_box_per_image=max_box_per_image,
         max_grid=[448, 448],
         batch_size=batch_size,
-        warmup_batches=0,
+        warmup_batches=2,
         ignore_thresh=0.5,
         multi_gpu=1,
         weights=pretrained_weights,
         learning_rate=learning_rate,
         grid_scales=[1, 1, 1],
         obj_scale=5,
-        noobj_scale=1,
+        noobj_scale=2,
         xywh_scale=1,
         class_scale=1,
     )
@@ -97,7 +95,7 @@ def run():
     reduce_lr = ReduceLROnPlateau(factor=0.1, patience=3, verbose=1)
     early_stopping = EarlyStopping(min_delta=0, patience=10, verbose=1)
     checkpoint = ModelCheckpoint(
-        'data/h5/1labels-ep{epoch:03d}-loss{val_loss:.4f}.h5',
+        'logs/3labels/all-ep{epoch:03d}-loss{val_loss:.4f}.h5',
         monitor='val_loss',
         save_weights_only=True,
         save_best_only=True,
@@ -127,15 +125,17 @@ def run():
         model=infer_model,
         generator=valid_generator,
         labels=labels,
+        anchors=anchors,
         show_boxes=show_boxes,
-        nms_thresh=0.45,
+        nms_thresh=0.1,
         net_shape=net_shape,
     )
 
     for label, average_precision in average_precisions.items():
-        # print(f'{labels[label]} : {average_precision:.4f}')
-        if label < len(labels):
-            print(f'label {label} : {(average_precision*100):.2f}%')
+        try:
+            print(f'label {labels[label]:10} : {(average_precision*100):.2f}%')
+        except Exception:
+            print(f"and {label}  : {(average_precision*100):.2f} %")
 
     # Step 8. Output
     mAP = sum(average_precisions.values()) / (len(average_precisions) - 5)

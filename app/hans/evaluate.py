@@ -6,7 +6,7 @@ from timeit import default_timer as timer
 
 
 def evaluate(
-    model, generator, labels, anchors, iou_threshold=0.25, obj_thresh=0.2,
+    model, generator, labels, anchors, iou_threshold=0.50, obj_thresh=0.50,
     nms_thresh=0.45, net_shape=(416, 416), save_path=None, show_boxes=False
 ):
     net_h, net_w = net_shape
@@ -19,13 +19,11 @@ def evaluate(
 
     start = end = timer()
     for i in range(gen_size):
-        show_flags = (i % 100 == 0 and show_boxes)
-
         image = [generator.load_image(i)]
         # make the boxes and the labels
         pred_boxes = get_yolo_boxes(
             model, image, labels, net_h, net_w, anchors, obj_thresh,
-            nms_thresh, show_flags
+            nms_thresh, False
         )[0]
 
         score = np.array([box.get_score() for box in pred_boxes])
@@ -56,7 +54,7 @@ def evaluate(
         if i % 100 == 0:
             current = end
             end = timer()
-            print(f"{i:4d}th time {(end - current):.3f}, {(end - start):.3f}")
+            print(f"{i:4d}/{gen_size:6d}th time {(end - current):.3f}, {(end - start):.3f}")
 
     # compute mAP by comparing all detections and all annotations
     average_precisions = {}
@@ -154,7 +152,7 @@ def get_yolo_boxes(
         # suppress non-maximal boxes
         do_nms(boxes, nms_thresh)
 
-        if show_boxes and i == (num_images) - 1:
+        if False:  # show_boxes and i == (num_images) - 1:
             draw_boxes(images[i], boxes, labels, obj_thresh)
 
         batch_boxes[i] = boxes

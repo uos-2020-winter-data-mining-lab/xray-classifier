@@ -1,4 +1,3 @@
-import os
 import cv2
 import numpy as np
 from scipy.special import expit
@@ -203,8 +202,4 @@ def draw_boxes(image, boxes, labels, obj_thresh, quiet=True):
                 color=(0, 0, 0),
                 thickness=1
             )
-
-    num = len(os.listdir('imgs'))
-    file_name = f'imgs/detected_{num}.png'
-    cv2.imwrite(file_name, image)
     return image

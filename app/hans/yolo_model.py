@@ -9,7 +9,9 @@ from keras.optimizers import Adam
 from .yolo_block import (
     make_last_layers, make_residual_blocks, yolo_block, yolo_layer
 )
+from .multi_gpu import multi_gpu_model
 from .yolo_layer import YoloLayer
+# from keras.utils.training_utils import multi_gpu_model
 
 
 def create_model(
@@ -30,20 +32,38 @@ def create_model(
     class_scale
 ):
     '''create the training model'''
-    train_model, infer_model = make_yolov3_model(
-        num_classes=num_classes,
-        anchors=anchors,
-        max_box_per_image=max_box_per_image,
-        max_grid=max_grid,
-        batch_size=batch_size,
-        warmup_batches=warmup_batches,
-        ignore_thresh=ignore_thresh,
-        grid_scales=grid_scales,
-        obj_scale=obj_scale,
-        noobj_scale=noobj_scale,
-        xywh_scale=xywh_scale,
-        class_scale=class_scale
-    )
+    if multi_gpu > 1:
+        print(f"  - Run Multi GPU : {multi_gpu} devices")
+        with tf.compat.v1.device('/cpu:0'):
+            train_model, infer_model = make_yolov3_model(
+                num_classes=num_classes,
+                anchors=anchors,
+                max_box_per_image=max_box_per_image,
+                max_grid=max_grid,
+                batch_size=batch_size//multi_gpu,
+                warmup_batches=warmup_batches,
+                ignore_thresh=ignore_thresh,
+                grid_scales=grid_scales,
+                obj_scale=obj_scale,
+                noobj_scale=noobj_scale,
+                xywh_scale=xywh_scale,
+                class_scale=class_scale
+            )
+    else:
+        train_model, infer_model = make_yolov3_model(
+            num_classes=num_classes,
+            anchors=anchors,
+            max_box_per_image=max_box_per_image,
+            max_grid=max_grid,
+            batch_size=batch_size,
+            warmup_batches=warmup_batches,
+            ignore_thresh=ignore_thresh,
+            grid_scales=grid_scales,
+            obj_scale=obj_scale,
+            noobj_scale=noobj_scale,
+            xywh_scale=xywh_scale,
+            class_scale=class_scale
+        )
 
     if weights is not None and os.path.exists(weights):
         print(f"pretrained weights {weights} is loaded")
@@ -51,9 +71,12 @@ def create_model(
         # for layer in range(185):
         #     train_model.layers[layer].trainable = False
 
+    if multi_gpu > 1:
+        train_model = multi_gpu_model(train_model, gpus=multi_gpu)
+
     train_model.compile(loss=dummy_loss, optimizer=Adam(lr=learning_rate))
 
-    return [train_model, infer_model]
+    return train_model, infer_model
 
 
 def make_yolov3_model(
@@ -138,7 +161,7 @@ def make_yolov3_model(
         [image_input, true_boxes, true_yolo1, true_yolo2, true_yolo3],
         [loss1, loss2, loss3])
 
-    return train_model, infer_model
+    return [train_model, infer_model]
 
 
 def dummy_loss(y_true, y_pred):

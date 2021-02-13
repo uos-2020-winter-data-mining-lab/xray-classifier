@@ -41,12 +41,12 @@ def load_data(
         coco_dir=coco_dir,
         pkl_file=pkl_file,
         image_dir=image_dir,
-        resize_dir=resize_dir,
         given_labels=given_labels
     )
-
-    print("  - Resize the images")
-    data = resizing(data, image_dir, resize_dir, save_resize)
+    print(f"  - Total Data : {len(data)}")
+    if save_resize is True:
+        print("  - Resize the images")
+        data = resizing(data, image_dir, resize_dir, save_resize)
 
     print("  - Get Anchors")
     anchors = get_anchors(data)
@@ -64,10 +64,10 @@ def load_data(
 
 
 def parse_coco_annotation(
-    coco_dir, pkl_file, image_dir, resize_dir, given_labels
+    coco_dir, pkl_file, image_dir, given_labels
 ):
-    if pkl_file and os.path.exists(pkl_file):
-        return load_pkl_file(pkl_file)
+    # if pkl_file and os.path.exists(pkl_file):
+    #     return load_pkl_file(pkl_file)
 
     print(f"  - Load dataset from coco file in ({coco_dir})")
     data = []
@@ -85,7 +85,7 @@ def parse_coco_annotation(
 
         for img in images:
             img_path = os.path.normpath(img['path']).replace("Images", "")
-            img['path'] = image_dir + img_path.split('view')[1]
+            img['path'] = image_dir + img_path.split('view')[1].replace("\\", "/")
             img['object'] = []
 
         for cat in categories:
@@ -102,8 +102,7 @@ def parse_coco_annotation(
             if given_labels != [] and obj['name'] not in given_labels:
                 continue
 
-            seen_labels[obj['name']] += 1
-
+            seen_labels[str(obj['name'])] += 1
             xmin, ymin, w, h = row['bbox']
             obj['xmin'], obj['xmax'] = xmin, xmin + w
             obj['ymin'], obj['ymax'] = ymin, ymin + h
@@ -121,6 +120,8 @@ def parse_coco_annotation(
 
 
 def resizing(data, image_dir, resize_dir, save_resize=False):
+    if save_resize is False:
+        return data
     RESIZE_RATIO = 2
     X_OFFSET, Y_OFFSET = 8, 60
     write_file_count = 0

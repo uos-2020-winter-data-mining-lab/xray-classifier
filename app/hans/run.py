@@ -19,23 +19,26 @@ def run():
     # Step 0. Config Options
     # Load Data Config
     given_labels = []  # , 'Bullet']
-    TAG = f'{len(given_labels)}labels-0201'
-    coco_dir = os.path.join('data', 'CoCo')
-    image_dir = os.path.join('D:\\', 'xray-dataset', 'dataset')
-    resize_dir = os.path.join('D:\\', 'xray-dataset', 'resize')
-    pkl_file = os.path.join('data', f'{TAG}.pkl')
+    TAG = f'{len(given_labels)}labels-0210'
+    root_dir = os.path.join('/home', 'handal', 'xray-classifier')
+    coco_dir = os.path.join(root_dir, 'data', 'CoCo')
+    image_dir = os.path.join(root_dir, 'data', 'Image')
+    resize_dir = os.path.join(root_dir, 'data', 'Resize')
+    log_dir = os.path.join(root_dir, 'logs')
+    pkl_file = os.path.join(root_dir, 'data', f'{TAG}.pkl')
     TAG = '0201'
 
-    epochs = 5
-    batch_size = 4
+    epochs = 100
+    batch_size = 8
     split_rate = 0.8
     learning_rate = 1e-4
+    multi_gpu = 1 
     run_model = True
-    save_resize = True
-    show_boxes = True
+    save_resize = False
+    show_boxes = False
     net_shape = (320, 320)
-    pretrained_weights = f'data/{TAG}.h5'
-    trained_weights = f'data/{TAG}.h5'
+    pretrained_weights = os.path.join(root_dir, 'data', f'{TAG}.h5')
+    trained_weights = os.path.join(root_dir, 'data', f'{TAG}.h5')
 
     # Step 1 . Load Data
     print(">> Step 1. Load Data")
@@ -77,9 +80,9 @@ def run():
         max_box_per_image=max_box_per_image,
         max_grid=[448, 448],
         batch_size=batch_size,
-        warmup_batches=2,
+        warmup_batches=0,
         ignore_thresh=0.5,
-        multi_gpu=1,
+        multi_gpu=multi_gpu,
         weights=pretrained_weights,
         learning_rate=learning_rate,
         grid_scales=[1, 1, 1],
@@ -95,7 +98,7 @@ def run():
     reduce_lr = ReduceLROnPlateau(factor=0.1, patience=3, verbose=1)
     early_stopping = EarlyStopping(min_delta=0, patience=10, verbose=1)
     checkpoint = ModelCheckpoint(
-        'logs/3labels/all-ep{epoch:03d}-loss{val_loss:.4f}.h5',
+        os.path.join(log_dir, 'ep{epoch:03d}-loss{val_loss:.4f}.h5'),
         monitor='val_loss',
         save_weights_only=True,
         save_best_only=True,
@@ -111,13 +114,18 @@ def run():
                 validation_steps=max(1, len(valid_data)//batch_size),
                 epochs=epochs,
                 callbacks=[checkpoint, reduce_lr, early_stopping],
+                workers=4,
+                max_queue_size=8
             )
             train_model.save_weights(trained_weights)
         except KeyboardInterrupt:
             print("abort!!!")
             return
-
+    
+    print(">> Done")
+    return
     infer_model.load_weights(trained_weights, by_name=True)
+    
 
     # Step 7. Predict / Evaluate
     print(">> Evaluate")
@@ -127,7 +135,7 @@ def run():
         labels=labels,
         anchors=anchors,
         show_boxes=show_boxes,
-        nms_thresh=0.1,
+        nms_thresh=0.45,
         net_shape=net_shape,
     )
 
@@ -135,7 +143,7 @@ def run():
         try:
             print(f'label {labels[label]:10} : {(average_precision*100):.2f}%')
         except Exception:
-            print(f"and {label}  : {(average_precision*100):.2f} %")
+            pass 
 
     # Step 8. Output
     mAP = sum(average_precisions.values()) / (len(average_precisions) - 5)
